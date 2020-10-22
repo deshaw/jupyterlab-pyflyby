@@ -1,0 +1,67 @@
+{
+  "name": "@deshaw/jupyterlab-pyflyby",
+  "version": "3.0.0",
+  "description": " A labextension to integrate pyflyby with notebooks",
+  "keywords": [
+    "jupyter",
+    "jupyterlab",
+    "jupyterlab-extension"
+  ],
+  "homepage": "https://github.com/deshaw/jupyterlab-pyflyby",
+  "bugs": {
+    "url": "https://github.com/deshaw/jupyterlab-pyflyby/issues"
+  },
+  "license": "BSD-3-Clause",
+  "files": [
+    "lib/**/*.{d.ts,eot,gif,html,jpg,js,js.map,json,png,svg,woff2,ttf}",
+    "style/**/*.{css,eot,gif,html,jpg,json,png,svg,woff2,ttf}",
+    "schema/*"
+  ],
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/deshaw/jupyterlab-pyflyby.git"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:labextension": "jlpm && jlpm clean:labextension && mkdirp ../labextension && cd ../labextension && npm pack ../ts",
+    "clean:labextension": "rimraf ../labextension",
+    "watch": "tsc -w",
+    "prettier": "prettier --write '**/*{.ts,.tsx,.js,.jsx,.css,.json,.md}'",
+    "tslint": "tslint --fix -c tslint.json --project tsconfig.json '**/*{.ts,.tsx}'",
+    "lint": "npm run prettier && npm run tslint",
+    "clean": "rimraf lib tsconfig.tsbuildinfo",
+    "prepack": "npm run clean && npm run build"
+  },
+  "dependencies": {
+    "@jupyterlab/application": "^2.1.0",
+    "@jupyterlab/apputils": "^2.1.0",
+    "@jupyterlab/docregistry": "^2.1.0",
+    "@jupyterlab/nbformat": "^2.1.0",
+    "@jupyterlab/notebook": "^2.1.0",
+    "@jupyterlab/services": "^5.1.0",
+    "@jupyterlab/settingregistry": "^2.1.0",
+    "@lumino/algorithm": "^1.2.3",
+    "@lumino/coreutils": "^1.4.2",
+    "@lumino/widgets": "^1.11.1",
+    "debug": "^4.1.1"
+  },
+  "peerDependencies": {
+    "react": "~16.13.1"
+  },
+  "devDependencies": {
+    "@types/debug": "^4.1.5",
+    "husky": "^4.2.5",
+    "prettier": "^2.0.4",
+    "tslint": "^6.1.1",
+    "tslint-config-prettier": "^1.18.0",
+    "tslint-plugin-prettier": "^2.3.0",
+    "typescript": "~3.8.3",
+    "rimraf": "^2.6.1"
+  },
+  "jupyterlab": {
+    "extension": true,
+    "schemaDir": "schema"
+  }
+}

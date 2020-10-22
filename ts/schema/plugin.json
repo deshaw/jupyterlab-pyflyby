@@ -1,0 +1,19 @@
+{
+  "title": "Pyflyby Preferences",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "enabled": {
+      "type": "boolean",
+      "title": "PYFLYBY Jupyterlab extension enabled",
+      "description": "Enable Pyflyby jupyterlab extension",
+      "default": true
+    },
+    "disableNotification": {
+      "type": "boolean",
+      "title": "Show notification when PYFLYBY starts adding imports to notebook",
+      "description": "Inform when pyflyby starts to add imports for the first time. Since this adds imports to the top cell, it may not be obvious to user",
+      "default": false
+    }
+  }
+}
