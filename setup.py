@@ -9,7 +9,9 @@ name = "jupyterlab_pyflyby"
 
 HERE = os.path.abspath(os.path.dirname(__file__))
 
-LONG_DESCRIPTION = "A labextension to integrate pyflyby with notebooks"
+def read(fname):
+    with open(os.path.join(HERE, fname)) as f:
+        return f.read()
 
 version = get_version(os.path.join(name, "_version.py"))
 
@@ -30,7 +32,8 @@ setup_args = {
     'name': 'jupyterlab_pyflyby',
     'version': version,
     'description': 'Pyflyby jupyterlab extension',
-    'long_description': LONG_DESCRIPTION,
+    'long_description': read('README.md'),
+    'long_description_content_type': 'text/markdown',
     'License': 'BSD-3-Clause',
     'include_package_data': True,
     'install_requires': [
