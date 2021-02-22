@@ -83,7 +83,7 @@ class PyflyByWidget extends Widget {
     this._sessionContext = context.sessionContext;
   }
 
-  async _launchDialog() {
+  async _launchDialog(imports: any) {
     /**
      * Since we are making the first import, create a new dialog
      */
@@ -96,6 +96,7 @@ class PyflyByWidget extends Widget {
     });
     try {
       await dialog.launch();
+      return imports;
     } catch (e) {
       console.error(e);
     }
@@ -148,31 +149,29 @@ class PyflyByWidget extends Widget {
    *
    * @param importBlock - the import statement or block of import statements
    */
-  _insertImport({ missing_imports: importBlock }: any) {
+  _insertImport(imports: any) {
     let p: Promise<any> = null;
     if (!_userWasNotified && !this._settings.get('disableNotification').user) {
-      p = this._launchDialog();
+      p = this._launchDialog(imports);
       _userWasNotified = true;
     } else {
-      p = Promise.resolve();
+      p = Promise.resolve(imports);
     }
+
     const { model } = this._context;
     // Find the right cell and position to insert cell
+    // //here is where we trigger stuff.
     const { position, cellIndex } = this._findImportCoordinates();
     const cell = model.cells.get(cellIndex);
     const insertIndex = position === -1 ? cell.value.text.length : position;
-    let toInsert =
-      cell.value.text.length === 0 ? importBlock : `${importBlock}\n`;
+    let toInsert = cell.value.text.length === 0 ? imports : `${imports}\n`;
     if (insertIndex !== 0 && cell.value.text[insertIndex - 1] !== `\n`) {
       toInsert = `\n${toInsert}`;
     }
-    cell.value.insert(insertIndex, toInsert);
-    this._sendFormatCodeMsg();
-
     return p;
   }
 
-  _sendFormatCodeMsg() {
+  _sendFormatCodeMsg(imports: any) {
     let pyflybyCellIndex = ArrayExt.findFirstIndex(
       toArray(this._context.model.cells),
       (cell: ICellModel, index: number) => {
@@ -188,6 +187,7 @@ class PyflyByWidget extends Widget {
       if (comm && !comm.isDisposed) {
         comm.send({
           input_code: cellSource,
+          imports: imports,
           type: PYFLYBY_COMMS.FORMAT_IMPORTS,
         });
       }
@@ -199,10 +199,13 @@ class PyflyByWidget extends Widget {
       const msgContent: JSONValue = msg.content.data;
       switch ((msgContent as JSONObject).type) {
         case PYFLYBY_COMMS.MISSING_IMPORTS:
-          this._insertImport(msg.content.data).catch(console.error);
+          const itd = msgContent['missing_imports'];
+          this._insertImport(itd).then((imports) => {
+            this._sendFormatCodeMsg(imports);
+          });
           break;
         case PYFLYBY_COMMS.FORMAT_IMPORTS:
-          this._formatImports(msg.content.data);
+          this._formatImports(msgContent);
           break;
         case PYFLYBY_COMMS.INIT:
           this._initializeComms().catch(console.error);
