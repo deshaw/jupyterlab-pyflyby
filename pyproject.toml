@@ -1,3 +1,3 @@
 [build-system]
-requires = ["jupyter_packaging~=0.4.0", "jupyterlab~=2.0", "setuptools>=40.8.0", "wheel", "jupyter_server<0.1.1", "pyzmq"]
+requires = ["jupyter_packaging~=0.7.9", "jupyterlab~=3.0", "setuptools>=40.8.0", "wheel", "jupyter_server~=1.0", "pyzmq"]
 build-backend = "setuptools.build_meta"

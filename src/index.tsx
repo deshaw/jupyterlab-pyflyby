@@ -40,8 +40,9 @@ import {
   PYFLYBY_CELL_TAG,
   PYFLYBY_START_MSG,
   PYFLYBY_END_MSG,
-  PYFLYBY_COMMS,
+  PYFLYBY_COMMS
 } from './constants';
+import { requestAPI } from './handler';
 
 const log = debug('PYFLYBY:');
 
@@ -92,7 +93,7 @@ class PyflyByWidget extends Widget {
       body: `PYFLYBY will be adding imports to the first code cell in the notebook.
             To disable the PYFLYBY extension or to disable this notification in future, go
             to Settings -> Advanced Settings Editor and choose PYFLYBY preferences tab`,
-      buttons: [Dialog.okButton()],
+      buttons: [Dialog.okButton()]
     });
     try {
       await dialog.launch();
@@ -132,8 +133,8 @@ class PyflyByWidget extends Widget {
         cell: {
           source: `${PYFLYBY_START_MSG}\n\n${PYFLYBY_END_MSG}`,
           cell_type: 'code',
-          metadata: {},
-        },
+          metadata: {}
+        }
       });
 
       this._context.model.cells.insert(pyflybyCellIndex, cell);
@@ -165,14 +166,14 @@ class PyflyByWidget extends Widget {
     const cell = model.cells.get(cellIndex);
     const insertIndex = position === -1 ? cell.value.text.length : position;
     let toInsert = cell.value.text.length === 0 ? imports : `${imports}\n`;
-    if (insertIndex !== 0 && cell.value.text[insertIndex - 1] !== `\n`) {
+    if (insertIndex !== 0 && cell.value.text[insertIndex - 1] !== '\n') {
       toInsert = `\n${toInsert}`;
     }
     return p;
   }
 
   _sendFormatCodeMsg(imports: any) {
-    let pyflybyCellIndex = ArrayExt.findFirstIndex(
+    const pyflybyCellIndex = ArrayExt.findFirstIndex(
       toArray(this._context.model.cells),
       (cell: ICellModel, index: number) => {
         const tags = cell.metadata.get('tags') as string[];
@@ -188,7 +189,7 @@ class PyflyByWidget extends Widget {
         comm.send({
           input_code: cellSource,
           imports: imports,
-          type: PYFLYBY_COMMS.FORMAT_IMPORTS,
+          type: PYFLYBY_COMMS.FORMAT_IMPORTS
         });
       }
     }
@@ -198,18 +199,21 @@ class PyflyByWidget extends Widget {
     return (msg: KernelMessage.ICommMsgMsg) => {
       const msgContent: JSONValue = msg.content.data;
       switch ((msgContent as JSONObject).type) {
-        case PYFLYBY_COMMS.MISSING_IMPORTS:
+        case PYFLYBY_COMMS.MISSING_IMPORTS: {
           const itd = msgContent['missing_imports'];
-          this._insertImport(itd).then((imports) => {
+          this._insertImport(itd).then(imports => {
             this._sendFormatCodeMsg(imports);
           });
           break;
-        case PYFLYBY_COMMS.FORMAT_IMPORTS:
+        }
+        case PYFLYBY_COMMS.FORMAT_IMPORTS: {
           this._formatImports(msgContent);
           break;
-        case PYFLYBY_COMMS.INIT:
+        }
+        case PYFLYBY_COMMS.INIT: {
           this._initializeComms().catch(console.error);
           break;
+        }
         default:
           break;
       }
@@ -217,6 +221,9 @@ class PyflyByWidget extends Widget {
   }
 
   async _initializeComms() {
+    if (!this._sessionContext.session) {
+      return;
+    }
     const { kernel } = this._sessionContext.session;
     if (!kernel) {
       return;
@@ -256,7 +263,7 @@ class PyflyByWidget extends Widget {
 
   _formatImports(msgData: any) {
     const { formatted_code: formattedCode } = msgData;
-    let pyflybyCellIndex = ArrayExt.findFirstIndex(
+    const pyflybyCellIndex = ArrayExt.findFirstIndex(
       toArray(this._context.model.cells),
       (cell: ICellModel, index: number) => {
         const tags = cell.metadata.get('tags') as string[];
@@ -277,10 +284,14 @@ class PyflyByWidget extends Widget {
     return await this._initializeComms();
   }
 
-  _handleKernelStatusChange(sender: ISessionContext, args: Kernel.Status) {
+  _handleKernelStatusChange(
+    sender: ISessionContext,
+    args: Kernel.Status
+  ): Promise<any> | null {
     if (args === 'restarting') {
       return this._initializeComms();
     }
+    return null;
   }
 
   private _context: DocumentRegistry.IContext<INotebookModel> = null;
@@ -318,14 +329,13 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
 }
 
 async function isPyflybyInstalled() {
-  const response = await fetch('/pyflyby/pyflyby-status');
-  const pyflybyStatus = await response.json();
+  const pyflybyStatus = await requestAPI<any>('pyflyby-status');
   return pyflybyStatus.status;
 }
 
 async function installPyflyby() {
   try {
-    await fetch('/pyflyby/install-pyflyby', { method: 'POST' });
+    await requestAPI<any>('install-pyflyby', { method: 'POST' });
   } catch (err) {
     const errMsg = await err.json();
     console.error(errMsg.result);
@@ -334,13 +344,13 @@ async function installPyflyby() {
 
 async function disableJupyterlabPyflyby(registry: ISettingRegistry) {
   try {
-    await fetch('/pyflyby/disable-pyflyby', {
+    await requestAPI<any>('disable-pyflyby', {
       method: 'POST',
       mode: 'cors',
       cache: 'no-cache',
       credentials: 'include',
       headers: { 'Content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams('installDialogDisplayed=true'),
+      body: new URLSearchParams('installDialogDisplayed=true')
     });
   } catch (err) {
     const errMsg = await err.json();
@@ -370,7 +380,7 @@ const installationBody = (
         font: 'monospace',
         color: '#ffffff',
         backgroundColor: '#000000',
-        marginTop: '5px',
+        marginTop: '5px'
       }}
     >
       $ py pyflyby.install_in_ipython_config_file
@@ -383,7 +393,14 @@ const extension = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
   requires: [ISettingRegistry],
-  activate: async function (app: JupyterFrontEnd, registry: ISettingRegistry) {
+  activate: async function (
+    app: JupyterFrontEnd,
+    registry: ISettingRegistry
+  ): Promise<void> {
+    console.log(
+      'JupyterLab extension @deshaw/jupyterlab-pyflyby is activated!'
+    );
+
     const settings = await registry.load('@deshaw/jupyterlab-pyflyby:plugin');
     const enabled =
       settings.get('enabled').user || settings.get('enabled').composite;
@@ -405,9 +422,9 @@ const extension = {
               Dialog.okButton({
                 label: 'Install'
               }),
-              Dialog.cancelButton({ label: 'Cancel', displayType: 'default' }),
+              Dialog.cancelButton({ label: 'Cancel', displayType: 'default' })
             ],
-            defaultButton: 0,
+            defaultButton: 0
           });
           result.button.accept
             ? await installPyflyby()
@@ -420,7 +437,7 @@ const extension = {
       'Notebook',
       new PyflyByWidgetExtension(registry)
     );
-  },
+  }
 };
 
 export default extension;

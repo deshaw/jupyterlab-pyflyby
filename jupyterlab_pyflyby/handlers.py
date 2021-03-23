@@ -1,5 +1,6 @@
-from __future__ import absolute_import, division
-
+from jupyter_server.base.handlers import APIHandler
+from jupyter_server.utils import url_path_join
+import tornado
 import json
 from notebook.base.handlers import IPythonHandler
 import os
@@ -50,7 +51,9 @@ class DisablePyflybyClient(IPythonHandler):
                 settings_dir, "@deshaw/jupyterlab-pyflyby/plugin.jupyterlab-settings"
             )
             installDialogDisplayed = (
-                True if self.get_body_argument("installDialogDisplayed") == "true" else False
+                True
+                if self.get_body_argument("installDialogDisplayed") == "true"
+                else False
             )
 
             settings = {"enabled": False}
@@ -65,4 +68,20 @@ class DisablePyflybyClient(IPythonHandler):
                 json.dump(settings, f, indent=4)
             self.finish({"result": "Disabled pyflyby extension successfully"})
         except Exception as err:
-            self.send_error({"result": "Could not disable pyflyby extension - {}".format(err)})
+            self.send_error(
+                {"result": "Could not disable pyflyby extension - {}".format(err)}
+            )
+
+
+def setup_handlers(web_app):
+    host_pattern = ".*$"
+
+    pyflyby_handlers = [
+        ("/pyflyby/pyflyby-status", PyflybyStatus),
+        ("/pyflyby/install-pyflyby", InstallPyflyby),
+        ("/pyflyby/disable-pyflyby", DisablePyflybyClient),
+    ]
+    base_url = web_app.settings["base_url"]
+    pyflyby_handlers = [(url_path_join(base_url, v[0]), v[1]) for v in pyflyby_handlers]
+
+    web_app.add_handlers(host_pattern, pyflyby_handlers)
