@@ -6,7 +6,7 @@ import { PYFLYBY_END_MSG } from './constants';
 
 // FIXME: There's got to be a better Typescript solution
 // for distinguishing between members of a union type at runtime.
-export const normalizeMultilineString = (source: MultilineString) => {
+export const normalizeMultilineString = (source: MultilineString): string[] => {
   // Multilinestring can be an array of strings or string
   return typeof source === 'string' ? source.split('\n') : source;
 };
@@ -18,7 +18,7 @@ export const normalizeMultilineString = (source: MultilineString) => {
  *
  * Expected to return true for import and code blocks
  */
-export const couldBeCode = (line: string) => {
+export const couldBeCode = (line: string): boolean => {
   return (
     !(
       line.startsWith('#') ||
@@ -29,7 +29,7 @@ export const couldBeCode = (line: string) => {
   );
 };
 
-export const couldBeImportStatement = (line: string) => {
+export const couldBeImportStatement = (line: string): boolean => {
   return (
     couldBeCode(line) &&
     (line.includes('__future__') ||
@@ -41,7 +41,7 @@ export const couldBeImportStatement = (line: string) => {
 /**
  * It is safe to insert import only if current line is empty or doesn't start with a whitespace
  * */
-export const safeToinsertImport = (line: string) => {
+export const safeToinsertImport = (line: string): boolean => {
   return line.trim() === '' || !line.match(/^\s.*$/);
 };
 
@@ -55,7 +55,7 @@ export const safeToinsertImport = (line: string) => {
  *
  * @param cellModels - an array of cell models
  */
-export const findCell = (cellModels: ICellModel[]) => {
+export const findCell = (cellModels: ICellModel[]): number => {
   const cellsArray = toArray(cellModels);
   for (let i = 0; i < cellsArray.length; i++) {
     const cellModel = cellsArray[i];
@@ -92,7 +92,7 @@ export const findCell = (cellModels: ICellModel[]) => {
  *
  * @param cell - a cell model
  */
-export const findLinePos = (cell: ICellModel) => {
+export const findLinePos = (cell: ICellModel): number => {
   const lines: string[] = normalizeMultilineString(cell.toJSON().source);
   for (let i = lines.length - 1; i >= 0; i--) {
     // If PYFLYBY_END_MSG is found, add new import statement above it

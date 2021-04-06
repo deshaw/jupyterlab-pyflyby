@@ -1,15 +1,32 @@
-from .pyflyby_handler import PyflybyStatus, InstallPyflyby, DisablePyflybyClient
-from notebook.utils import url_path_join
+import json
+from pathlib import Path
 
-def load_jupyter_server_extension(nb_server_app):
-    pyflyby_handlers = [
-        ("/pyflyby/pyflyby-status", PyflybyStatus),
-        ("/pyflyby/install-pyflyby", InstallPyflyby),
-        ("/pyflyby/disable-pyflyby", DisablePyflybyClient)
-    ]
-    web_app = nb_server_app.web_app
-    base_url = web_app.settings["base_url"]
+from ._version import __version__
 
-    pyflyby_handlers = [(url_path_join(base_url, v[0]), v[1]) for v in pyflyby_handlers]
+HERE = Path(__file__).parent.resolve()
 
-    web_app.add_handlers(".*", pyflyby_handlers)
+with (HERE / "labextension" / "package.json").open() as fid:
+    data = json.load(fid)
+
+
+def _jupyter_labextension_paths():
+    return [{"src": "labextension", "dest": data["name"]}]
+
+
+from .handlers import setup_handlers
+
+
+def _jupyter_server_extension_points():
+    return [{"module": "jupyterlab_pyflyby"}]
+
+
+def _load_jupyter_server_extension(server_app):
+    """Registers the API handler to receive HTTP requests from the frontend extension.
+
+    Parameters
+    ----------
+    server_app: jupyterlab.labapp.LabApp
+        JupyterLab application instance
+    """
+    setup_handlers(server_app.web_app)
+    server_app.log.warn("Registered extension at URL path /pyflyby")
