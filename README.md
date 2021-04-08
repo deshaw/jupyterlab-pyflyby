@@ -1,6 +1,7 @@
 # @deshaw/jupyterlab_pyflyby
 
-![Github Actions Status](https://github.com/deshaw/jupyterlab-pyflyby.git/workflows/Build/badge.svg)
+[![PyPI version][pypi-image]][pypi-url] [![PyPI DM][pypi-dm-image]][pypi-url]
+[![Github Actions Status][github-status-image]][github-status-url]
 
 A labextension to integrate pyflyby with notebooks
 
@@ -106,3 +107,9 @@ This plugin was contributed back to the community by the [D. E. Shaw group](http
 This project is released under a [BSD-3-Clause license](https://github.com/deshaw/jupyterlab-pyflyby/blob/master/LICENSE.txt).
 
 "Jupyter" is a trademark of the NumFOCUS foundation, of which Project Jupyter is a part.
+
+[pypi-url]: https://pypi.org/project/jupyterlab-pyflyby
+[pypi-image]: https://img.shields.io/pypi/v/jupyterlab-pyflyby
+[pypi-dm-image]: https://img.shields.io/pypi/dm/jupyterlab-pyflyby
+[github-status-image]: https://github.com/deshaw/jupyterlab-pyflyby/workflows/Build/badge.svg
+[github-status-url]: https://github.com/deshaw/jupyterlab-pyflyby/actions?query=workflow%3ABuild
