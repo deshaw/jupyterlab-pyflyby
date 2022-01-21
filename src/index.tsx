@@ -46,6 +46,39 @@ import { requestAPI } from './handler';
 
 const log = debug('PYFLYBY:');
 
+class CommLock {
+  _disable: any;
+  promise: any;
+  requestedLockCount: number;
+  clearedLockCount: number;
+
+  constructor() {
+    this.requestedLockCount = 0;
+    this.clearedLockCount = 0;
+    this._disable = {};
+    this.promise = { 0: Promise.resolve() };
+  }
+
+  enable(id: number): void {
+    this.requestedLockCount++;
+    this.promise[id] = new Promise(resolve => {
+      this._disable[id] = resolve;
+      // Timeout and release the lock 1.5 sec after previous lock was released
+      setTimeout(() => {
+        if (this._disable?.[id]) {
+          this.disable();
+        }
+      }, 1500 * (this.requestedLockCount - this.clearedLockCount));
+    });
+  }
+
+  disable(): void {
+    this.clearedLockCount++;
+    this._disable[this.clearedLockCount]();
+    delete this._disable[this.clearedLockCount];
+  }
+}
+
 // We'd like to show the notification only once per session, not for each notebook
 let _userWasNotified = false;
 
@@ -53,12 +86,14 @@ let _userWasNotified = false;
  * An extension that adds pyflyby integration to a single notebook widget
  */
 class PyflyByWidget extends Widget {
+  _lock: CommLock;
   constructor(
     context: DocumentRegistry.IContext<INotebookModel>,
     panel: Panel,
     settingRegistry: ISettingRegistry
   ) {
     super();
+    this._lock = new CommLock();
     // get a reference to the settings registry
     settingRegistry.load('@deshaw/jupyterlab-pyflyby:plugin').then(
       (settings: ISettingRegistry.ISettings) => {
@@ -106,7 +141,7 @@ class PyflyByWidget extends Widget {
   /**
    * All the logic related to finding the right cell
    */
-  _findImportCoordinates() {
+  _findAndSetImportCoordinates() {
     const { model } = this._context;
     let pyflybyCellIndex = ArrayExt.findFirstIndex(
       toArray(model.cells),
@@ -159,16 +194,8 @@ class PyflyByWidget extends Widget {
       p = Promise.resolve(imports);
     }
 
-    const { model } = this._context;
-    // Find the right cell and position to insert cell
-    // //here is where we trigger stuff.
-    const { position, cellIndex } = this._findImportCoordinates();
-    const cell = model.cells.get(cellIndex);
-    const insertIndex = position === -1 ? cell.value.text.length : position;
-    let toInsert = cell.value.text.length === 0 ? imports : `${imports}\n`;
-    if (insertIndex !== 0 && cell.value.text[insertIndex - 1] !== '\n') {
-      toInsert = `\n${toInsert}`;
-    }
+    // creates the cell for imports
+    this._findAndSetImportCoordinates();
     return p;
   }
 
@@ -196,18 +223,23 @@ class PyflyByWidget extends Widget {
   }
 
   _getCommMsgHandler() {
-    return (msg: KernelMessage.ICommMsgMsg) => {
+    return async (msg: KernelMessage.ICommMsgMsg) => {
       const msgContent: JSONValue = msg.content.data;
       switch ((msgContent as JSONObject).type) {
         case PYFLYBY_COMMS.MISSING_IMPORTS: {
           const itd = msgContent['missing_imports'];
-          this._insertImport(itd).then(imports => {
+          this._insertImport(itd).then(async imports => {
+            // Acquire new lock but wait for previous lock to expire
+            const currentLockId = this._lock.requestedLockCount;
+            this._lock.enable(currentLockId + 1);
+            await this._lock.promise[currentLockId];
             this._sendFormatCodeMsg(imports);
           });
           break;
         }
         case PYFLYBY_COMMS.FORMAT_IMPORTS: {
           this._formatImports(msgContent);
+          this._lock.disable();
           break;
         }
         case PYFLYBY_COMMS.INIT: {
