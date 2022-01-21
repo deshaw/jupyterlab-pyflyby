@@ -15,11 +15,11 @@ jobs:
     - name: Install node
       uses: actions/setup-node@v1
       with:
-       node-version: '12.x'
+       node-version: '16.x'
     - name: Install Python
       uses: actions/setup-python@v2
       with:
-        python-version: '3.7'
+        python-version: '3.9'
         architecture: 'x64'
     
     
@@ -27,9 +27,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.cache/pip
-        key: pip-3.7-${{ hashFiles('package.json') }}
+        key: pip-3.9-${{ hashFiles('package.json') }}
         restore-keys: |
-          pip-3.7-
+          pip-3.9-
           pip-
 
     - name: Get yarn cache directory path
