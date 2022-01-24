@@ -1,6 +1,6 @@
 {
   "name": "@deshaw/jupyterlab-pyflyby",
-  "version": "4.1.0",
+  "version": "4.1.1",
   "description": "A labextension to integrate pyflyby with notebooks",
   "keywords": [
     "jupyter",
