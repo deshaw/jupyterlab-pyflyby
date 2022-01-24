@@ -1,3 +1,9 @@
+## [4.1.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.0.0...v4.1.0) (2022-01-24)
+
+### Fixed
+
+- Race condition in comms (#2)
+
 ## [4.0.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v3.010...v4.0.0) (2021-04-06)
 
 ### Fixed
