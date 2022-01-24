@@ -1,3 +1,9 @@
+## [4.1.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.1.0...v4.1.1) (2022-01-25)
+
+### Fixed
+
+- Fix disabling of locks due to timeout.
+
 ## [4.1.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.0.0...v4.1.0) (2022-01-24)
 
 ### Fixed
