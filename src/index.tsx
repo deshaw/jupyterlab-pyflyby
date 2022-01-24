@@ -66,7 +66,7 @@ class CommLock {
       // Timeout and release the lock 1.5 sec after previous lock was released
       setTimeout(() => {
         if (this._disable?.[id]) {
-          this.disable();
+          this._disable[id]?.();
         }
       }, 1500 * (this.requestedLockCount - this.clearedLockCount));
     });
@@ -74,7 +74,7 @@ class CommLock {
 
   disable(): void {
     this.clearedLockCount++;
-    this._disable[this.clearedLockCount]();
+    this._disable[this.clearedLockCount]?.();
     delete this._disable[this.clearedLockCount];
   }
 }
