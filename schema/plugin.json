@@ -15,10 +15,10 @@
       "description": "Inform when pyflyby starts to add imports for the first time. Since this adds imports to the top cell, it may not be obvious to user",
       "default": false
     },
-    "lockTimeout": {
+    "experimentalLockTimeout": {
       "type": "number",
       "title": "The timeout (in sec) for when the import locks should expire. If a lock expires then the import will be skipped being added.",
-      "default": 999999
+      "default": 10
     }
   }
 }

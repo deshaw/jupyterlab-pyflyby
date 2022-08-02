@@ -84,13 +84,32 @@ class CommLock {
 		If the kernel was busy the last time, we assume it was busy executing 
 		code and we restart the timeout.
   */
-  timeoutExpireHandler(sender: CommLock, args: number) {
+  timeoutExpireHandler(sender: CommLock, id: number) {
     this._clearTimeout();
     if (this._recentKernelState === 'busy') {
-      console.log('Extending Timeout For: ', args);
-      this.createTimeout(args);
+      console.debug('Extending Timeout For: ', id);
+      this.createTimeout(id);
     } else {
-      this.disable(args);
+      this.release(id);
+    }
+  }
+
+  async acquire(): Promise<number> {
+    const lockId = this.requestedLockCount++;
+    this.promise[this.requestedLockCount] = new Promise(resolve => {
+      this._disable[this.requestedLockCount] = resolve;
+    });
+    await this.promise[lockId];
+    return new Promise((res, rej) => res(lockId + 1));
+  }
+
+  release(lockId: number): void {
+    this.clearedLockCount = lockId;
+    this._disable[lockId]?.();
+    delete this._disable[lockId];
+    this._clearTimeout();
+    if (this.clearedLockCount < this.requestedLockCount) {
+      this.createTimeout(lockId + 1);
     }
   }
 
@@ -105,16 +124,6 @@ class CommLock {
     this.promise[id] = new Promise(resolve => {
       this._disable[id] = resolve;
     });
-  }
-
-  disable(id: number): void {
-    this.clearedLockCount++;
-    this._disable[id]?.();
-    delete this._disable[id];
-    this._clearTimeout();
-    if (this.clearedLockCount < this.requestedLockCount) {
-      this.createTimeout(id + 1);
-    }
   }
 }
 
@@ -258,7 +267,7 @@ class PyflyByWidget extends Widget {
       const comm = this._comms[PYFLYBY_COMMS.FORMAT_IMPORTS];
       if (comm && !comm.isDisposed) {
         comm.send({
-          lock_id: lockId,
+          msg_id: lockId,
           input_code: cellSource,
           imports: imports,
           type: PYFLYBY_COMMS.FORMAT_IMPORTS
@@ -275,17 +284,15 @@ class PyflyByWidget extends Widget {
           const itd = msgContent['missing_imports'];
           this._insertImport(itd).then(async imports => {
             // Acquire new lock but wait for previous lock to expire
-            const currentLockId = this._lock.requestedLockCount;
-            this._lock.enable(currentLockId + 1);
-            await this._lock.promise[currentLockId];
+            const currentLockId = await this._lock.acquire();
             this._sendFormatCodeMsg(imports, currentLockId);
           });
           break;
         }
         case PYFLYBY_COMMS.FORMAT_IMPORTS: {
           this._formatImports(msgContent);
-          const { lock_id: lockId }: any = msgContent;
-          this._lock.disable(lockId + 1);
+          const { msg_id: lockId }: any = msgContent;
+          this._lock.release(lockId);
           break;
         }
         case PYFLYBY_COMMS.INIT: {
