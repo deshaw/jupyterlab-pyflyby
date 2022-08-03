@@ -153,8 +153,8 @@ class PyflyByWidget extends Widget {
 
         const _lockTimeout =
           1000 *
-          ((settings.get('experimentalLockTimeout').user ||
-            settings.get('experimentalLockTimeout').composite) as number);
+          ((settings.get('lockTimeout').user ||
+            settings.get('lockTimeout').composite) as number);
         this._lock = new CommLock(_lockTimeout, this._sessionContext);
       },
       (err: any) => {
