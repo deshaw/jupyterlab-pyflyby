@@ -48,7 +48,7 @@ import { requestAPI } from './handler';
 const log = debug('PYFLYBY:');
 
 class CommLock {
-  _disable: any;
+  _releaseLock: any;
   promise: any;
   requestedLockCount: number;
   clearedLockCount: number;
@@ -63,7 +63,7 @@ class CommLock {
     this._activeTimeout = null;
     this.requestedLockCount = 0;
     this.clearedLockCount = 0;
-    this._disable = {};
+    this._releaseLock = {};
     this.promise = { 0: Promise.resolve() };
     this._timeoutSignal = new Signal<CommLock, number>(this);
     this._sessionContext = sessionContext;
@@ -81,8 +81,8 @@ class CommLock {
   }
 
   /*
-		If the kernel was busy the last time, we assume it was busy executing 
-		code and we restart the timeout.
+    If the kernel was busy the last time, we assume it was busy executing 
+    code and we restart the timeout.
   */
   timeoutExpireHandler(sender: CommLock, id: number) {
     this._clearTimeout();
@@ -97,7 +97,7 @@ class CommLock {
   async acquire(): Promise<number> {
     const lockId = this.requestedLockCount++;
     this.promise[this.requestedLockCount] = new Promise(resolve => {
-      this._disable[this.requestedLockCount] = resolve;
+      this._releaseLock[this.requestedLockCount] = resolve;
     });
     await this.promise[lockId];
     return new Promise((res, rej) => res(lockId + 1));
@@ -105,8 +105,8 @@ class CommLock {
 
   release(lockId: number): void {
     this.clearedLockCount = lockId;
-    this._disable[lockId]?.();
-    delete this._disable[lockId];
+    this._releaseLock[lockId]?.();
+    delete this._releaseLock[lockId];
     this._clearTimeout();
     if (this.clearedLockCount < this.requestedLockCount) {
       this.createTimeout(lockId + 1);
@@ -117,13 +117,6 @@ class CommLock {
     this._activeTimeout = setTimeout(() => {
       this._timeoutSignal.emit(id);
     }, this._lockTimeout);
-  }
-
-  enable(id: number): void {
-    this.requestedLockCount++;
-    this.promise[id] = new Promise(resolve => {
-      this._disable[id] = resolve;
-    });
   }
 }
 
@@ -160,8 +153,8 @@ class PyflyByWidget extends Widget {
 
         const _lockTimeout =
           1000 *
-          ((settings.get('lockTimeout').user ||
-            settings.get('lockTimeout').composite) as number);
+          ((settings.get('experimentalLockTimeout').user ||
+            settings.get('experimentalLockTimeout').composite) as number);
         this._lock = new CommLock(_lockTimeout, this._sessionContext);
       },
       (err: any) => {
