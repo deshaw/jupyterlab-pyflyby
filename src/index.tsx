@@ -30,6 +30,7 @@ import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { DocumentRegistry } from '@jupyterlab/docregistry';
 import { INotebookModel } from '@jupyterlab/notebook';
 import { Session, Kernel, KernelMessage } from '@jupyterlab/services';
+import { Signal } from '@lumino/signaling';
 
 import { debug } from 'debug';
 import React from 'react';
@@ -47,35 +48,77 @@ import { requestAPI } from './handler';
 const log = debug('PYFLYBY:');
 
 class CommLock {
-  _disable: any;
+  _releaseLock: any;
   promise: any;
   requestedLockCount: number;
   clearedLockCount: number;
+  _activeTimeout: number;
+  _lockTimeout: number;
+  _timeoutSignal: Signal<CommLock, number>;
+  _recentKernelState: string;
+  _sessionContext: ISessionContext;
 
-  constructor() {
+  constructor(_lockTimeout: number, sessionContext: ISessionContext) {
+    this._lockTimeout = _lockTimeout;
+    this._activeTimeout = null;
     this.requestedLockCount = 0;
     this.clearedLockCount = 0;
-    this._disable = {};
+    this._releaseLock = {};
     this.promise = { 0: Promise.resolve() };
+    this._timeoutSignal = new Signal<CommLock, number>(this);
+    this._sessionContext = sessionContext;
+    this._sessionContext.statusChanged.connect(this.kernelStateRecorder, this);
+    this._timeoutSignal.connect(this.timeoutExpireHandler, this);
   }
 
-  enable(id: number): void {
+  kernelStateRecorder(sender: ISessionContext, args: Kernel.Status) {
+    this._recentKernelState = args;
+  }
+
+  _clearTimeout() {
+    window.clearTimeout(this._activeTimeout);
+    this._activeTimeout = null;
+  }
+
+  /*
+    If the kernel was busy the last time, we assume it was busy executing 
+    code and we restart the timeout.
+  */
+  timeoutExpireHandler(sender: CommLock, id: number) {
+    this._clearTimeout();
+    if (this._recentKernelState === 'busy') {
+      console.debug('Extending Timeout For: ', id);
+      this.createTimeout(id);
+    } else {
+      this.release(id);
+    }
+  }
+
+  async acquire(): Promise<number> {
+    const lastLockPromise = this.promise[this.requestedLockCount];
     this.requestedLockCount++;
-    this.promise[id] = new Promise(resolve => {
-      this._disable[id] = resolve;
-      // Timeout and release the lock 1.5 sec after previous lock was released
-      setTimeout(() => {
-        if (this._disable?.[id]) {
-          this._disable[id]?.();
-        }
-      }, 1500 * (this.requestedLockCount - this.clearedLockCount));
+    const lockId = this.requestedLockCount;
+    this.promise[lockId] = new Promise(resolve => {
+      this._releaseLock[lockId] = resolve;
     });
+    await lastLockPromise;
+    return new Promise((res, rej) => res(lockId));
   }
 
-  disable(): void {
-    this.clearedLockCount++;
-    this._disable[this.clearedLockCount]?.();
-    delete this._disable[this.clearedLockCount];
+  release(lockId: number): void {
+    this.clearedLockCount = lockId;
+    this._releaseLock[lockId]?.();
+    delete this._releaseLock[lockId];
+    this._clearTimeout();
+    if (this.clearedLockCount < this.requestedLockCount) {
+      this.createTimeout(lockId + 1);
+    }
+  }
+
+  createTimeout(id: number) {
+    this._activeTimeout = setTimeout(() => {
+      this._timeoutSignal.emit(id);
+    }, this._lockTimeout);
   }
 }
 
@@ -93,7 +136,6 @@ class PyflyByWidget extends Widget {
     settingRegistry: ISettingRegistry
   ) {
     super();
-    this._lock = new CommLock();
     // get a reference to the settings registry
     settingRegistry.load('@deshaw/jupyterlab-pyflyby:plugin').then(
       (settings: ISettingRegistry.ISettings) => {
@@ -110,6 +152,12 @@ class PyflyByWidget extends Widget {
             this
           );
         }
+
+        const _lockTimeout =
+          1000 *
+          ((settings.get('lockTimeout').user ||
+            settings.get('lockTimeout').composite) as number);
+        this._lock = new CommLock(_lockTimeout, this._sessionContext);
       },
       (err: any) => {
         log('PYFLYBY extension has been disabled');
@@ -199,7 +247,7 @@ class PyflyByWidget extends Widget {
     return p;
   }
 
-  _sendFormatCodeMsg(imports: any) {
+  _sendFormatCodeMsg(imports: any, lockId: number) {
     const pyflybyCellIndex = ArrayExt.findFirstIndex(
       toArray(this._context.model.cells),
       (cell: ICellModel, index: number) => {
@@ -214,6 +262,7 @@ class PyflyByWidget extends Widget {
       const comm = this._comms[PYFLYBY_COMMS.FORMAT_IMPORTS];
       if (comm && !comm.isDisposed) {
         comm.send({
+          msg_id: lockId,
           input_code: cellSource,
           imports: imports,
           type: PYFLYBY_COMMS.FORMAT_IMPORTS
@@ -230,16 +279,15 @@ class PyflyByWidget extends Widget {
           const itd = msgContent['missing_imports'];
           this._insertImport(itd).then(async imports => {
             // Acquire new lock but wait for previous lock to expire
-            const currentLockId = this._lock.requestedLockCount;
-            this._lock.enable(currentLockId + 1);
-            await this._lock.promise[currentLockId];
-            this._sendFormatCodeMsg(imports);
+            const currentLockId = await this._lock.acquire();
+            this._sendFormatCodeMsg(imports, currentLockId);
           });
           break;
         }
         case PYFLYBY_COMMS.FORMAT_IMPORTS: {
           this._formatImports(msgContent);
-          this._lock.disable();
+          const { msg_id: lockId }: any = msgContent;
+          this._lock.release(lockId);
           break;
         }
         case PYFLYBY_COMMS.INIT: {
