@@ -95,12 +95,14 @@ class CommLock {
   }
 
   async acquire(): Promise<number> {
-    const lockId = this.requestedLockCount++;
-    this.promise[this.requestedLockCount] = new Promise(resolve => {
-      this._releaseLock[this.requestedLockCount] = resolve;
+    const lastLockPromise = this.promise[this.requestedLockCount];
+    this.requestedLockCount++;
+    const lockId = this.requestedLockCount;
+    this.promise[lockId] = new Promise(resolve => {
+      this._releaseLock[lockId] = resolve;
     });
-    await this.promise[lockId];
-    return new Promise((res, rej) => res(lockId + 1));
+    await lastLockPromise;
+    return new Promise((res, rej) => res(lockId));
   }
 
   release(lockId: number): void {
