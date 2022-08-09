@@ -1,4 +1,4 @@
-## [4.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.1.1...v4.2.0) (UNRELEASED)
+## [4.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.1.1...v4.2.0) (2022-08-09)
 
 ### Fixed
 
