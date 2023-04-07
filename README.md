@@ -13,7 +13,7 @@ You can decide cell where imports should be added by adding 'pyflyby-cell' cell 
 
 ## Requirements
 
-- JupyterLab >= 3.0
+- JupyterLab >= 4.0
 
 ## Install
 
