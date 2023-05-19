@@ -119,3 +119,6 @@ dmypy.json
 
 # Yarn cache
 .yarn/
+
+jupyterlab_pyflyby-*.whl
+jupyterlab_pyflyby-*.tar.gz

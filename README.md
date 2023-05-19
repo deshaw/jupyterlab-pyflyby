@@ -75,22 +75,21 @@ git push && git push --tags
 3. Create the artifacts
 
 ```
-rm -rf dist
-python setup.py sdist bdist_wheel
+rm -rf dist tsconfig.tsbuildinfo lib jupyterlab_pyflyby/labextension jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl
+hatch build .
 ```
 
 4. Test this against the test pypi. You can then install from here to test as well:
 
 ```
-twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-# In a new venv
+twine upload --repository-url https://test.pypi.org/legacy/ jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl# In a new venv
 pip install --index-url https://test.pypi.org/simple/ jupyterlab_pyflyby
 ```
 
 5. Upload this to pypi:
 
 ```
-twine upload dist/*
+twine upload jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl
 ```
 
 ### Uninstall

@@ -42,7 +42,7 @@
     "install:extension": "jlpm build",
     "lint": "jlpm stylelint && jlpm prettier && jlpm eslint",
     "lint:check": "jlpm stylelint:check && jlpm prettier:check && jlpm eslint:check",
-    "prepare": "jlpm run clean && jlpm run build:prod",
+    "prepare": "jlpm run clean && jlpm run build:prod && husky install",
     "prettier": "jlpm prettier:base --write --list-different",
     "prettier:base": "prettier \"**/*{.ts,.tsx,.js,.jsx,.css,.json,.md}\"",
     "prettier:check": "jlpm prettier:base --check",
@@ -53,13 +53,13 @@
     "watch:src": "tsc -w"
   },
   "dependencies": {
-    "@jupyterlab/application": "^4.0.0-beta.1",
-    "@jupyterlab/apputils": "^4.0.0-beta.1",
-    "@jupyterlab/docregistry": "^4.0.0-beta.1",
-    "@jupyterlab/nbformat": "^4.0.0-beta.1",
-    "@jupyterlab/notebook": "^4.0.0-beta.1",
-    "@jupyterlab/services": "^7.0.0-beta.1",
-    "@jupyterlab/settingregistry": "^4.0.0-beta.1",
+    "@jupyterlab/application": "^4.0.0",
+    "@jupyterlab/apputils": "^4.0.0",
+    "@jupyterlab/docregistry": "^4.0.0",
+    "@jupyterlab/nbformat": "^4.0.0",
+    "@jupyterlab/notebook": "^4.0.0",
+    "@jupyterlab/services": "^7.0.0",
+    "@jupyterlab/settingregistry": "^4.0.0",
     "@lumino/algorithm": "^2.0.0",
     "@lumino/coreutils": "^2.0.0",
     "@lumino/widgets": "^2.0.1",
@@ -69,7 +69,7 @@
     "react": "~17.0.1"
   },
   "devDependencies": {
-    "@jupyterlab/builder": "^4.0.0-beta.0",
+    "@jupyterlab/builder": "^4.0.0",
     "@types/debug": "^4.1.5",
     "@types/json-schema": "^7.0.11",
     "@types/react": "^18.0.26",
@@ -79,7 +79,7 @@
     "eslint": "^8.36.0",
     "eslint-config-prettier": "^8.7.0",
     "eslint-plugin-prettier": "^4.2.1",
-    "husky": "^4.2.3",
+    "husky": "^8.0.0",
     "mkdirp": "^1.0.3",
     "npm-run-all": "^4.1.5",
     "prettier": "^2.8.7",
@@ -93,11 +93,6 @@
     "stylelint-prettier": "^2.0.0",
     "typescript": "~5.0.2",
     "yjs": "^13.5.40"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "jlpm run lint"
-    }
   },
   "jupyterlab": {
     "extension": true,
