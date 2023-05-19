@@ -16,19 +16,19 @@
 
 - Race condition in comms (#2)
 
-## [4.0.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v3.010...v4.0.0) (2021-04-06)
+## [4.0.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v3.0.1...v4.0.0) (2021-04-06)
 
 ### Fixed
 
 - JupyterLab 3 Support
 
-## [3.0.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v3.0.0...v3.0.1) (2020-12-24)
+## [3.0.1] (2020-12-24)
 
 ### Fixed
 
 - Update long_description in setup.py for show complete README.md on pypi page
 
-## [3.0.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v3.0.0...v3.0.0) (2020-12-03)
+## [3.0.0] (2020-12-03)
 
 ### Added
 
