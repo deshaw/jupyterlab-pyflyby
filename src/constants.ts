@@ -5,5 +5,6 @@ export const PYFLYBY_END_MSG = '# END AUTO-GENERATED BLOCK\n';
 export const PYFLYBY_COMMS = {
   MISSING_IMPORTS: 'pyflyby.missing_imports',
   FORMAT_IMPORTS: 'pyflyby.format_imports',
-  INIT: 'pyflyby.init_comms'
+  INIT: 'pyflyby.init_comms',
+  TIDY_IMPORTS: 'pyflyby.tidy_imports'
 };

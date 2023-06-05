@@ -28,10 +28,19 @@ import { Dialog, ISessionContext, showDialog } from '@jupyterlab/apputils';
 import { ICellModel } from '@jupyterlab/cells';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { DocumentRegistry } from '@jupyterlab/docregistry';
-import { INotebookModel } from '@jupyterlab/notebook';
+import {
+  INotebookModel,
+  INotebookTracker,
+  NotebookPanel
+} from '@jupyterlab/notebook';
+import { LabIcon } from '@jupyterlab/ui-components';
+import { ICommandPalette, ToolbarButton } from '@jupyterlab/apputils';
+import { DisposableDelegate, IDisposable } from '@lumino/disposable';
 import { Session, Kernel, KernelMessage } from '@jupyterlab/services';
 import { Signal } from '@lumino/signaling';
-
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+import tidyImportSVG from '../style/tidy-import.svg';
 import { debug } from 'debug';
 import React from 'react';
 
@@ -271,6 +280,45 @@ class PyflyByWidget extends Widget {
     }
   }
 
+  async sendTidyImportRequest(): Promise<any> {
+    const cells = this._context.model.cells;
+    const cellArray = [];
+    for (let i = 0; i < cells.length; ++i) {
+      cellArray.push({
+        code: cells.get(i).value.text,
+        type: cells.get(i).type
+      });
+    }
+    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
+    if (comm && !comm.isDisposed) {
+      comm.send({
+        type: PYFLYBY_COMMS.TIDY_IMPORTS,
+        cellArray: cellArray
+      });
+    }
+  }
+
+  refillCells(cellArray: any, imports: any): void {
+    const cells = this._context.model.cells;
+    for (let i = 0; i < cellArray.length; ++i) {
+      const cell = cells.get(i);
+      cell.value.remove(0, cell.value.text.length);
+      cell.value.insert(0, cellArray[i].code.trim());
+    }
+    const joined_imports = imports.join('\n').trim();
+    if (cells.get(0).value.text.length === 0) {
+      cells.get(0).value.insert(0, joined_imports);
+    } else {
+      const cell = this._context.model.contentFactory.createCodeCell({
+        cell: {
+          source: joined_imports,
+          cell_type: 'code',
+          metadata: {}
+        }
+      });
+      cells.insert(0, cell);
+    }
+  }
   _getCommMsgHandler() {
     return async (msg: KernelMessage.ICommMsgMsg) => {
       const msgContent: JSONValue = msg.content.data;
@@ -292,6 +340,11 @@ class PyflyByWidget extends Widget {
         }
         case PYFLYBY_COMMS.INIT: {
           this._initializeComms().catch(console.error);
+          break;
+        }
+        case PYFLYBY_COMMS.TIDY_IMPORTS: {
+          const { cells, imports } = msgContent;
+          this.refillCells(cells, imports);
           break;
         }
         default:
@@ -331,6 +384,14 @@ class PyflyByWidget extends Widget {
       console.error(`Unable to open PYFLYBY comm - ${e}`);
     }
 
+    const tidyImportsComm = kernel.createComm(PYFLYBY_COMMS.TIDY_IMPORTS);
+    tidyImportsComm.onMsg = this._getCommMsgHandler();
+    this._comms[PYFLYBY_COMMS.TIDY_IMPORTS] = tidyImportsComm;
+    try {
+      tidyImportsComm.open();
+    } catch (e) {
+      console.error(`Unable to open PYFLYBY comm - ${e}`);
+    }
     kernel.registerCommTarget(
       PYFLYBY_COMMS.INIT,
       (comm, msg: KernelMessage.ICommOpenMsg) => {
@@ -402,7 +463,8 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
   }
 
   createNew(panel: Panel, context: DocumentRegistry.IContext<INotebookModel>) {
-    return new PyflyByWidget(context, panel, this._settingRegistry);
+    pyflybyWidget = new PyflyByWidget(context, panel, this._settingRegistry);
+    return pyflybyWidget;
   }
 
   private _settingRegistry: ISettingRegistry = null;
@@ -469,17 +531,61 @@ const installationBody = (
   </div>
 );
 
+class TidyImportButtonExtension
+  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
+  createNew(
+    widget: NotebookPanel,
+    context: DocumentRegistry.IContext<INotebookModel>
+  ): IDisposable {
+    const button = new ToolbarButton({
+      className: 'tidy-import-button',
+      label: '',
+      icon: TidyImportsIcon,
+      onClick: () => pyflybyWidget.sendTidyImportRequest()
+    });
+
+    widget.toolbar.insertItem(10, 'tidy-imports', button);
+    return new DisposableDelegate(() => {
+      button.dispose();
+    });
+  }
+}
+
+const TidyImportsIcon = new LabIcon({
+  name: 'DJSDocSearch',
+  svgstr: tidyImportSVG
+});
+
+let pyflybyWidget: any = null;
+
+const djsTidyImportsCommand = 'djs:run-tidy-imports';
+
+const PLUGIN_ID = '@deshaw/jupyterlab-pyflyby:plugin';
+
 const extension = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
-  requires: [ISettingRegistry],
+  requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
   activate: async function (
     app: JupyterFrontEnd,
-    registry: ISettingRegistry
+    registry: ISettingRegistry,
+    tracker: INotebookTracker,
+    palette: ICommandPalette
   ): Promise<void> {
     console.log(
       'JupyterLab extension @deshaw/jupyterlab-pyflyby is activated!'
     );
+
+    app.commands.addCommand(djsTidyImportsCommand, {
+      execute: () => pyflybyWidget.sendTidyImportRequest(),
+      icon: TidyImportsIcon,
+      label: 'Run tidy-imports on Notebook'
+    });
+
+    palette.addItem({
+      command: djsTidyImportsCommand,
+      category: 'Notebook'
+    });
 
     const settings = await registry.load('@deshaw/jupyterlab-pyflyby:plugin');
     const enabled =
@@ -516,6 +622,11 @@ const extension = {
     app.docRegistry.addWidgetExtension(
       'Notebook',
       new PyflyByWidgetExtension(registry)
+    );
+
+    app.docRegistry.addWidgetExtension(
+      'Notebook',
+      new TidyImportButtonExtension()
     );
   }
 };
