@@ -560,8 +560,6 @@ let pyflybyWidget: any = null;
 
 const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
-const PLUGIN_ID = '@deshaw/jupyterlab-pyflyby:plugin';
-
 const extension = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
