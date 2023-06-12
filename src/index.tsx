@@ -302,7 +302,7 @@ class PyflyByWidget extends Widget {
   }
 
   restoreNotebookAfterTidyImports(cellArray: any, imports: any): void {
-    const {cellIndex} = this._findAndSetImportCoordinates();
+    const { cellIndex } = this._findAndSetImportCoordinates();
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
@@ -317,7 +317,7 @@ class PyflyByWidget extends Widget {
         source: joined_imports,
         cell_type: 'code',
         metadata: {
-            trusted: true
+          trusted: true
         }
       });
     }
@@ -537,7 +537,8 @@ const installationBody = (
 );
 
 class TidyImportButtonExtension
-  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
+  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel>
+{
   createNew(
     widget: NotebookPanel,
     context: DocumentRegistry.IContext<INotebookModel>
