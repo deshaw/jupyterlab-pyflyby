@@ -288,7 +288,7 @@ class PyflyByWidget extends Widget {
     const cellArray = [];
     for (let i = 0; i < cells.length; ++i) {
       cellArray.push({
-        code: cells.get(i).value.text,
+        code: cells.get(i).sharedModel.getSource(),
         type: cells.get(i).type
       });
     }
@@ -305,21 +305,20 @@ class PyflyByWidget extends Widget {
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
-      cell.value.remove(0, cell.value.text.length);
-      cell.value.insert(0, cellArray[i].code.trim());
+      const model = cell.sharedModel;
+      model.setSource(cellArray[i].code.trim());
     }
     const joined_imports = imports.join('\n').trim();
-    if (cells.get(0).value.text.length === 0) {
-      cells.get(0).value.insert(0, joined_imports);
+    if (cells.get(0).sharedModel.getSource().length === 0) {
+      cells.get(0).sharedModel.setSource(joined_imports);
     } else {
-      const cell = this._context.model.contentFactory.createCodeCell({
-        cell: {
-          source: joined_imports,
-          cell_type: 'code',
-          metadata: {}
+      this._context.model.sharedModel.insertCell(0, {
+        source: joined_imports,
+        cell_type: 'code',
+        metadata: {
+            trusted: true
         }
       });
-      cells.insert(0, cell);
     }
   }
   _getCommMsgHandler() {
