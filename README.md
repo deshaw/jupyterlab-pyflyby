@@ -13,7 +13,7 @@ You can decide cell where imports should be added by adding 'pyflyby-cell' cell 
 
 ## Requirements
 
-- JupyterLab >= 3.0
+- JupyterLab >= 4.0
 
 ## Install
 
@@ -75,22 +75,21 @@ git push && git push --tags
 3. Create the artifacts
 
 ```
-rm -rf dist
-python setup.py sdist bdist_wheel
+rm -rf dist tsconfig.tsbuildinfo lib jupyterlab_pyflyby/labextension jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl
+hatch build .
 ```
 
 4. Test this against the test pypi. You can then install from here to test as well:
 
 ```
-twine upload --repository-url https://test.pypi.org/legacy/ dist/*
-# In a new venv
+twine upload --repository-url https://test.pypi.org/legacy/ jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl# In a new venv
 pip install --index-url https://test.pypi.org/simple/ jupyterlab_pyflyby
 ```
 
 5. Upload this to pypi:
 
 ```
-twine upload dist/*
+twine upload jupyterlab_pyflyby-*.tar.gz jupyterlab_pyflyby-*.whl
 ```
 
 ### Uninstall
@@ -112,6 +111,9 @@ This plugin was contributed back to the community by the [D. E. Shaw group](http
 ## License
 
 This project is released under a [BSD-3-Clause license](https://github.com/deshaw/jupyterlab-pyflyby/blob/master/LICENSE.txt).
+
+We love contributions! Before you can contribute, please sign and submit this [Contributor License Agreement (CLA)](https://www.deshaw.com/oss/cla).
+This CLA is in place to protect all users of this project.
 
 "Jupyter" is a trademark of the NumFOCUS foundation, of which Project Jupyter is a part.
 

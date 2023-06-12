@@ -1,18 +1,19 @@
-from jupyter_server.base.handlers import APIHandler
-from jupyter_server.utils import url_path_join
-import tornado
 import json
-from notebook.base.handlers import IPythonHandler
 import os
 import subprocess
 
+from jupyter_server.base.handlers import APIHandler
+from jupyter_server.utils import url_path_join
+import tornado
 
-class PyflybyStatus(IPythonHandler):
-    """
-    Checks if pyflyby is loaded by default in ipython session
+
+class Status(APIHandler):
+    """Checks if pyflyby is loaded by default in ipython session
+
     Return {"status": "loaded"} if included by default, else {"status": "not-loaded"}
     """
-
+    # Users must be authenticated to make requests to the jupyter server
+    @tornado.web.authenticated
     def get(self):
         from IPython.terminal.ipapp import load_default_config
 
@@ -23,11 +24,12 @@ class PyflybyStatus(IPythonHandler):
             self.finish({"status": "not-loaded"})
 
 
-class InstallPyflyby(IPythonHandler):
-    """
-    Adds pyflyby to ipython extensions, to be included default everytime ipython is launched
-    """
+class Install(APIHandler):
+    """Adds pyflyby to ipython extensions.
 
+    Pyflyby will be included by default everytime ipython is launched.
+    """
+    @tornado.web.authenticated
     def post(self):
         try:
             subprocess.run(["py", "pyflyby.install_in_ipython_config_file"])
@@ -36,11 +38,9 @@ class InstallPyflyby(IPythonHandler):
             self.send_error({"result": "Pyflyby installation failed - {}".format(err)})
 
 
-class DisablePyflybyClient(IPythonHandler):
-    """
-    Disables jupyterlab-pyflyby labextension for user
-    """
-
+class Disable(APIHandler):
+    """Disables jupyterlab-pyflyby labextension for user"""
+    @tornado.web.authenticated
     def post(self):
         try:
             settings_dir = os.environ.get(
@@ -57,7 +57,8 @@ class DisablePyflybyClient(IPythonHandler):
             )
 
             settings = {"enabled": False}
-            # To remember dialog box to install pyflyby ipython extension was displayed for current user
+            # To remember dialog box to install pyflyby ipython extension was
+            # displayed for current user
             settings["installDialogDisplayed"] = installDialogDisplayed
 
             if os.path.exists(pyflyby_settings_file):
@@ -76,12 +77,10 @@ class DisablePyflybyClient(IPythonHandler):
 def setup_handlers(web_app):
     host_pattern = ".*$"
 
-    pyflyby_handlers = [
-        ("/pyflyby/pyflyby-status", PyflybyStatus),
-        ("/pyflyby/install-pyflyby", InstallPyflyby),
-        ("/pyflyby/disable-pyflyby", DisablePyflybyClient),
-    ]
     base_url = web_app.settings["base_url"]
-    pyflyby_handlers = [(url_path_join(base_url, v[0]), v[1]) for v in pyflyby_handlers]
-
-    web_app.add_handlers(host_pattern, pyflyby_handlers)
+    handlers = [
+        (url_path_join(base_url, "pyflyby", "pyflyby-status"), Status),
+        (url_path_join(base_url, "pyflyby", "install-pyflyby"), Install),
+        (url_path_join(base_url, "pyflyby", "disable-pyflyby"), Disable),
+    ]
+    web_app.add_handlers(host_pattern, handlers)
