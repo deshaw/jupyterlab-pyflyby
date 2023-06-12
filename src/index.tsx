@@ -288,7 +288,7 @@ class PyflyByWidget extends Widget {
     const cellArray = [];
     for (let i = 0; i < cells.length; ++i) {
       cellArray.push({
-        code: cells.get(i).sharedModel.getSource(),
+        text: cells.get(i).sharedModel.getSource(),
         type: cells.get(i).type
       });
     }
@@ -301,18 +301,19 @@ class PyflyByWidget extends Widget {
     }
   }
 
-  refillCells(cellArray: any, imports: any): void {
+  restoreNotebookAfterTidyImports(cellArray: any, imports: any): void {
+    const {cellIndex} = this._findAndSetImportCoordinates();
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
       const model = cell.sharedModel;
-      model.setSource(cellArray[i].code.trim());
+      model.setSource(cellArray[i].text);
     }
     const joined_imports = imports.join('\n').trim();
     if (cells.get(0).sharedModel.getSource().length === 0) {
       cells.get(0).sharedModel.setSource(joined_imports);
     } else {
-      this._context.model.sharedModel.insertCell(0, {
+      this._context.model.sharedModel.insertCell(cellIndex, {
         source: joined_imports,
         cell_type: 'code',
         metadata: {
@@ -350,7 +351,7 @@ class PyflyByWidget extends Widget {
         }
         case PYFLYBY_COMMS.TIDY_IMPORTS: {
           const { cells, imports } = msgContent;
-          this.refillCells(cells, imports);
+          this.restoreNotebookAfterTidyImports(cells, imports);
           break;
         }
         default:
@@ -543,7 +544,7 @@ class TidyImportButtonExtension
   ): IDisposable {
     const button = new ToolbarButton({
       className: 'tidy-import-button',
-      label: '',
+      label: 'Run tidy-imports on this notebook',
       icon: TidyImportsIcon,
       onClick: () => pyflybyWidget.sendTidyImportRequest()
     });
