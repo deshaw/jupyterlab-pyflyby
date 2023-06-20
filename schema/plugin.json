@@ -9,6 +9,12 @@
       "description": "Enable Pyflyby jupyterlab extension",
       "default": true
     },
+    "useBlack": {
+      "type": "boolean",
+      "title": "Use Black to format imports added",
+      "description": "Enable Black formatter on imports added to the top cell",
+      "default": false
+    },
     "disableNotification": {
       "type": "boolean",
       "title": "Show notification when PYFLYBY starts adding imports to notebook",
