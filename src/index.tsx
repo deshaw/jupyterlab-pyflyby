@@ -284,21 +284,29 @@ class PyflyByWidget extends Widget {
   }
 
   async sendTidyImportRequest(): Promise<any> {
+    const cellArray = this._getCellArray();
+    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
+    if (comm && !comm.isDisposed) {
+      comm.send({
+        type: PYFLYBY_COMMS.TIDY_IMPORTS,
+        cellArray: cellArray,
+        checksum: this._getHashOfCodeInNotebook()
+      });
+    }
+  }
+
+  _getCellArray() {
     const cells = this._context.model.cells;
     const cellArray = [];
+
     for (let i = 0; i < cells.length; ++i) {
       cellArray.push({
         text: cells.get(i).sharedModel.getSource(),
         type: cells.get(i).type
       });
     }
-    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
-    if (comm && !comm.isDisposed) {
-      comm.send({
-        type: PYFLYBY_COMMS.TIDY_IMPORTS,
-        cellArray: cellArray
-      });
-    }
+
+    return cellArray;
   }
 
   restoreNotebookAfterTidyImports(cellArray: any, imports: any): void {
@@ -322,6 +330,26 @@ class PyflyByWidget extends Widget {
       });
     }
   }
+
+  _fastStringHash(str: string) {
+    let hash = 0;
+    for (let i = 0, len = str.length; i < len; i++) {
+      const chr = str.charCodeAt(i);
+      hash = (hash << 5) - hash + chr;
+      hash |= 0; // Convert to 32bit integer
+    }
+    return hash;
+  }
+
+  _getHashOfCodeInNotebook() {
+    const cellArray = this._getCellArray();
+    let joinedText = '';
+    for (let i = 0; i < cellArray.length; ++i) {
+      joinedText = joinedText + cellArray[i].text;
+    }
+    return this._fastStringHash(joinedText);
+  }
+
   _getCommMsgHandler() {
     return async (msg: KernelMessage.ICommMsgMsg) => {
       const msgContent: JSONValue = msg.content.data;
@@ -350,8 +378,21 @@ class PyflyByWidget extends Widget {
           break;
         }
         case PYFLYBY_COMMS.TIDY_IMPORTS: {
-          const { cells, imports } = msgContent;
-          this.restoreNotebookAfterTidyImports(cells, imports);
+          const { cells, imports, checksum } = msgContent;
+          if (checksum === this._getHashOfCodeInNotebook()) {
+            this.restoreNotebookAfterTidyImports(cells, imports);
+          } else {
+            await showDialog({
+              title: 'TidyImports Interrupted',
+              body: 'TidyImports could not be run because code in the notebook has been changed',
+              buttons: [
+                Dialog.okButton({
+                  label: 'Ok'
+                })
+              ],
+              defaultButton: 0
+            });
+          }
           break;
         }
         default:
@@ -545,7 +586,7 @@ class TidyImportButtonExtension
   ): IDisposable {
     const button = new ToolbarButton({
       className: 'tidy-import-button',
-      label: 'Run tidy-imports on this notebook',
+      tooltip: 'Run tidy-imports on this notebook',
       icon: TidyImportsIcon,
       onClick: () => pyflybyWidget.sendTidyImportRequest()
     });
