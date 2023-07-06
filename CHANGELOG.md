@@ -1,3 +1,14 @@
+## [5.1.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.0.0...v5.1.0) (UNRELEASED)
+
+### Added
+Support to run `tidy-imports` on a notebook.
+
+## [5.0.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.2.0...v5.0.0) (2023-05-19)
+
+### Changed
+
+- **Breaking**: Ported to JupyterLab 4.x
+
 ## [4.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.1.1...v4.2.0) (2022-08-09)
 
 ### Fixed

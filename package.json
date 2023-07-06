@@ -75,6 +75,9 @@
     "rimraf": "^3.0.2",
     "typescript": "~4.1.3"
   },
+  "resolutions": {
+    "@jupyterlab/rendermime-interfaces": "3.6.3"
+  },
   "husky": {
     "hooks": {
       "pre-commit": "jlpm run lint"
