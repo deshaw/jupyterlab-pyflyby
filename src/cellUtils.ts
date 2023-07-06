@@ -1,5 +1,4 @@
 import { toArray } from '@lumino/algorithm';
-
 import { MultilineString } from '@jupyterlab/nbformat';
 import { ICellModel } from '@jupyterlab/cells';
 import { PYFLYBY_END_MSG } from './constants';
