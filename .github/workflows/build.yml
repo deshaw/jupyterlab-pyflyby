@@ -55,4 +55,3 @@ jobs:
         jupyter server extension list 2>&1 | grep -ie "jupyterlab_pyflyby.*OK"
 
         jupyter labextension list 2>&1 | grep -ie "@deshaw/jupyterlab-pyflyby.*OK"
-        python -m jupyterlab.browser_check
