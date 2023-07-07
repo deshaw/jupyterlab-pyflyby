@@ -298,7 +298,7 @@ class PyflyByWidget extends Widget {
 
     for (let i = 0; i < cells.length; ++i) {
       cellArray.push({
-        text: cells.get(i).sharedModel.getSource(),
+        text: cells.get(i).value.text,
         type: cells.get(i).type
       });
     }
@@ -311,20 +311,23 @@ class PyflyByWidget extends Widget {
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
-      const model = cell.sharedModel;
-      model.setSource(cellArray[i].text);
+      cell.value.remove(0, cell.value.text.length);
+      cell.value.insert(0, cellArray[i].text.trim());
     }
     const joined_imports = imports.join('\n').trim();
-    if (cells.get(0).sharedModel.getSource().length === 0) {
-      cells.get(0).sharedModel.setSource(joined_imports);
+    if (cells.get(0).value.text.length === 0) {
+      cells.get(0).value.insert(0, joined_imports);
     } else {
-      this._context.model.sharedModel.insertCell(cellIndex, {
-        source: joined_imports,
-        cell_type: 'code',
-        metadata: {
-          trusted: true
+      const cell = this._context.model.contentFactory.createCodeCell({
+        cell: {
+          source: joined_imports,
+          cell_type: 'code',
+          metadata: {
+            trusted: true
+          }
         }
       });
+      cells.insert(cellIndex, cell);
     }
   }
 
