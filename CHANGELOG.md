@@ -10,7 +10,7 @@ Support to run `tidy-imports` on a notebook.
 
 - **Breaking**: Ported to JupyterLab 4.x
 
-## [4.3.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.2.0...v4.3.0) (UNRELEASED)
+## [4.3.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.2.0...v4.3.0) (2023-08-03)
 
 ### Added
 
