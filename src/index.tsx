@@ -597,7 +597,7 @@ class TidyImportButtonExtension
 }
 
 const TidyImportsIcon = new LabIcon({
-  name: 'DJSDocSearch',
+  name: 'TidyImports',
   svgstr: tidyImportSVG
 });
 
