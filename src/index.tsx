@@ -310,7 +310,6 @@ class PyflyByWidget extends Widget {
   }
 
   restoreNotebookAfterTidyImports(cellArray: any, imports: any): void {
-    const { cellIndex } = this._findAndSetImportCoordinates();
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
@@ -318,17 +317,12 @@ class PyflyByWidget extends Widget {
       model.setSource(cellArray[i].text);
     }
     const joined_imports = imports.join('\n').trim();
-    if (cells.get(0).sharedModel.getSource().length === 0) {
-      cells.get(0).sharedModel.setSource(joined_imports);
-    } else {
-      this._context.model.sharedModel.insertCell(cellIndex, {
-        source: joined_imports,
-        cell_type: 'code',
-        metadata: {
-          trusted: true
-        }
-      });
-    }
+    const { cellIndex } = this._findAndSetImportCoordinates();
+    cells
+      .get(cellIndex)
+      .sharedModel.setSource(
+        `${PYFLYBY_START_MSG}${joined_imports}\n${PYFLYBY_END_MSG}`
+      );
   }
 
   _fastStringHash(str: string) {
