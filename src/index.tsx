@@ -307,7 +307,6 @@ class PyflyByWidget extends Widget {
   }
 
   restoreNotebookAfterTidyImports(cellArray: any, imports: any): void {
-    const { cellIndex } = this._findAndSetImportCoordinates();
     const cells = this._context.model.cells;
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
@@ -315,20 +314,19 @@ class PyflyByWidget extends Widget {
       cell.value.insert(0, cellArray[i].text.trim());
     }
     const joined_imports = imports.join('\n').trim();
-    if (cells.get(0).value.text.length === 0) {
-      cells.get(0).value.insert(0, joined_imports);
-    } else {
-      const cell = this._context.model.contentFactory.createCodeCell({
-        cell: {
-          source: joined_imports,
-          cell_type: 'code',
-          metadata: {
-            trusted: true
-          }
-        }
-      });
-      cells.insert(cellIndex, cell);
-    }
+    const { cellIndex } = this._findAndSetImportCoordinates();
+    cells
+      .get(cellIndex)
+      .value.remove(0, cells.get(cellIndex).value.text.length);
+
+    // `joined_imports` contains all the imports in the notebook so it is safe
+    // to wrap it under PYFLYBY comments and insert into the pyflyby cell directly
+    cells
+      .get(cellIndex)
+      .value.insert(
+        0,
+        `${PYFLYBY_START_MSG}${joined_imports}\n${PYFLYBY_END_MSG}`
+      );
   }
 
   _fastStringHash(str: string) {
