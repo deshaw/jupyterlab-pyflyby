@@ -121,8 +121,7 @@ export const findLinePos = (cell: ICellModel): number => {
 };
 
 /**
- * Find the line number which contains the PYFLYBY_END_MSG.
- * Returns -1 if the PYFLYBY_END_MSG doesn't exist.
+ * This code extracts non-imports lines from the pyflyby cell.
  *
  * @param cell - a cell model
  */
