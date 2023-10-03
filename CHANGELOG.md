@@ -17,7 +17,7 @@ Support to run `tidy-imports` on a notebook.
 - Fixed a bug where multiple clicks of the TidyImportsButton caused the notebook to be modified in unexpected ways. Some of these were -
   - Outputs of cells being mismatched when reconstructing the notebook.
   - Addition of random cells above and below the pyflyby tagged cell.
-  - Mutliple clicks of the TidyImportButton would keep adding extra lines in the pyflyby cell.
+  - Mutliple clicks of the TidyImportsButton would keep adding extra lines in the pyflyby cell.
 
 ## [4.3.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v4.3.0...v4.3.1) (2023-08-10)
 
