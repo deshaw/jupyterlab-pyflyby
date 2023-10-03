@@ -1,7 +1,7 @@
 import { toArray } from '@lumino/algorithm';
 import { MultilineString } from '@jupyterlab/nbformat';
 import { ICellModel } from '@jupyterlab/cells';
-import { PYFLYBY_END_MSG } from './constants';
+import { PYFLYBY_END_MSG, PYFLYBY_START_MSG } from './constants';
 
 // FIXME: There's got to be a better Typescript solution
 // for distinguishing between members of a union type at runtime.
@@ -118,4 +118,34 @@ export const findLinePos = (cell: ICellModel): number => {
   // Cell contains only comments or magics, so return -1.
   // These imports will be moved to next cell
   return -1;
+};
+
+/**
+ * Find the line number which contains the PYFLYBY_END_MSG.
+ * Returns -1 if the PYFLYBY_END_MSG doesn't exist.
+ *
+ * @param cell - a cell model
+ */
+export const extractCodeFromPyflybyCell = (cell: ICellModel): string => {
+  const lines: string[] = normalizeMultilineString(cell.toJSON().source);
+
+  let stIdx = -1,
+    enIdx = -1;
+  for (let i = 0; i < lines.length; ++i) {
+    if (lines[i] === PYFLYBY_START_MSG.trim()) {
+      stIdx = i;
+    }
+    if (lines[i] === PYFLYBY_END_MSG.trim()) {
+      enIdx = i;
+    }
+  }
+
+  // we splice it twice to remove the pyflyby messages
+  const imports: string = lines
+    .splice(stIdx, enIdx - stIdx + 1)
+    .splice(stIdx + 1, enIdx - stIdx - 1)
+    .join();
+  const remainingCode: string = lines.join('');
+  console.log(imports, remainingCode);
+  return remainingCode;
 };

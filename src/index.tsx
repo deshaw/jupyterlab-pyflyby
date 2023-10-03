@@ -19,7 +19,11 @@
 
 // Lumino imports
 import { toArray, ArrayExt } from '@lumino/algorithm';
-import { JSONValue, JSONObject } from '@lumino/coreutils';
+import {
+  JSONValue,
+  JSONObject,
+  ReadonlyPartialJSONValue
+} from '@lumino/coreutils';
 import { Widget, Panel } from '@lumino/widgets';
 
 // Jupyterlab imports
@@ -45,7 +49,7 @@ import { debug } from 'debug';
 import React from 'react';
 
 // relative imports
-import { findCell, findLinePos } from './cellUtils';
+import { extractCodeFromPyflybyCell, findCell, findLinePos } from './cellUtils';
 import {
   PYFLYBY_CELL_TAG,
   PYFLYBY_START_MSG,
@@ -313,20 +317,56 @@ class PyflyByWidget extends Widget {
       cell.value.remove(0, cell.value.text.length);
       cell.value.insert(0, cellArray[i].text.trim());
     }
-    const joined_imports = imports.join('\n').trim();
+    const joinedImports = imports.trim();
     const { cellIndex } = this._findAndSetImportCoordinates();
-    cells
-      .get(cellIndex)
-      .value.remove(0, cells.get(cellIndex).value.text.length);
 
-    // `joined_imports` contains all the imports in the notebook so it is safe
-    // to wrap it under PYFLYBY comments and insert into the pyflyby cell directly
-    cells
-      .get(cellIndex)
-      .value.insert(
-        0,
-        `${PYFLYBY_START_MSG}${joined_imports}\n${PYFLYBY_END_MSG}`
-      );
+    const remainingCodeInPyflybyCell = extractCodeFromPyflybyCell(
+      cells.get(cellIndex)
+    );
+
+    if (remainingCodeInPyflybyCell !== '') {
+      // Remove import statements from the current pyflyby cell
+      cells
+        .get(cellIndex)
+        .value.remove(0, cells.get(cellIndex).value.text.length);
+
+      cells.get(cellIndex).value.insert(0, remainingCodeInPyflybyCell);
+
+      // remove the pyflyby cell tag from the current cell, we'll create another pyflyby cell
+      const tags: string[] = cells
+        .get(cellIndex)
+        .metadata.get('tags') as string[];
+      tags.splice(tags.indexOf(PYFLYBY_CELL_TAG));
+      cells
+        .get(cellIndex)
+        .metadata.set('tags', tags as ReadonlyPartialJSONValue);
+
+      // Create a new pyflyby cell and insert it at the top
+      const cell = this._context.model.contentFactory.createCodeCell({
+        cell: {
+          source: [PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join(
+            '\n'
+          ),
+          cell_type: 'code',
+          metadata: {
+            trusted: true,
+            tags: [PYFLYBY_CELL_TAG]
+          }
+        }
+      });
+
+      cells.insert(0, cell);
+    } else {
+      cells
+        .get(cellIndex)
+        .value.remove(0, cells.get(cellIndex).value.text.length);
+      cells
+        .get(cellIndex)
+        .value.insert(
+          0,
+          [PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join('\n')
+        );
+    }
   }
 
   _fastStringHash(str: string) {
