@@ -140,11 +140,10 @@ export const extractCodeFromPyflybyCell = (cell: ICellModel): string => {
   }
 
   // we splice it twice to remove the pyflyby messages
-  const imports: string = lines
+  lines
     .splice(stIdx, enIdx - stIdx + 1)
     .splice(stIdx + 1, enIdx - stIdx - 1)
     .join();
   const remainingCode: string = lines.join('');
-  console.log(imports, remainingCode);
   return remainingCode;
 };

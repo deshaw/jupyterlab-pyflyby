@@ -329,31 +329,32 @@ class PyflyByWidget extends Widget {
     );
 
     if (remainingCodeInPyflybyCell !== '') {
-      // Remove import statements from the current pyflyby cell
-      cells
-        .get(cellIndex)
-        .sharedModel.setSource('');
-
       cells.get(cellIndex).sharedModel.setSource(remainingCodeInPyflybyCell);
 
       // remove the pyflyby cell tag from the current cell, we'll create another pyflyby cell
-      const tags: string[] = cells.get(cellIndex).getMetadata("tags") as string[];
+      const tags: string[] = cells
+        .get(cellIndex)
+        .getMetadata('tags') as string[];
       tags.splice(tags.indexOf(PYFLYBY_CELL_TAG));
-      cells.get(cellIndex).setMetadata('tags', tags as ReadonlyPartialJSONValue);
+      cells
+        .get(cellIndex)
+        .setMetadata('tags', tags as ReadonlyPartialJSONValue);
 
       // Create a new pyflyby cell and insert it at the top
       this._context.model.sharedModel.insertCell(0, {
         source: [PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join('\n'),
         cell_type: 'code',
         metadata: {
-            trusted: true,
-            tags: [PYFLYBY_CELL_TAG]
+          trusted: true,
+          tags: [PYFLYBY_CELL_TAG]
         }
-      })
+      });
     } else {
-        cells.get(cellIndex).sharedModel.setSource([PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join(
-            '\n'
-        ))
+      cells
+        .get(cellIndex)
+        .sharedModel.setSource(
+          [PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join('\n')
+        );
     }
   }
 
