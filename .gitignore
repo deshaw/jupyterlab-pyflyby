@@ -122,3 +122,4 @@ dmypy.json
 
 jupyterlab_pyflyby-*.whl
 jupyterlab_pyflyby-*.tar.gz
+jupyterlab_pyflyby/_version.py
