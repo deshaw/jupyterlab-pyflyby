@@ -386,10 +386,8 @@ class PyflyByWidget extends Widget {
     }
 
     this._context.model.sharedModel.transact(() => {
-      for (let i = 0; i < cellsToDelete.length; ++i) {
-        // we do cellsToDelete[i] - i because the cells will move back as we
-        // perform deletions
-        this._context.model.sharedModel.deleteCell(cellsToDelete[i] - i);
+      for (let i = cellsToDelete.length - 1; i >= 0; --i) {
+        this._context.model.sharedModel.deleteCell(cellsToDelete[i]);
       }
     });
   }
