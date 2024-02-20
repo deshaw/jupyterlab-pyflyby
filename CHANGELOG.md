@@ -1,4 +1,4 @@
-## [5.1.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.0...v5.1.1) (UNRELEASED)
+## [5.1.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.0...v5.1.1) (2024-02-20)
 
 ### Fixed
 
