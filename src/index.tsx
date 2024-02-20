@@ -228,6 +228,7 @@ class PyflyByWidget extends Widget {
     let position = findLinePos(model.cells.get(pyflybyCellIndex));
 
     if (position === -1) {
+      pyflybyCellIndex = 0;
       cell = this._context.model.sharedModel.insertCell(0, {
         source: `${PYFLYBY_START_MSG}\n\n${PYFLYBY_END_MSG}`,
         cell_type: 'code',
@@ -318,7 +319,7 @@ class PyflyByWidget extends Widget {
     for (let i = 0; i < cellArray.length; ++i) {
       const cell = cells.get(i);
       const model = cell.sharedModel;
-      model.setSource(cellArray[i].text);
+      model.setSource(cellArray[i].text.trim());
     }
 
     const joinedImports = imports.trim();
@@ -356,6 +357,39 @@ class PyflyByWidget extends Widget {
           [PYFLYBY_START_MSG, joinedImports, PYFLYBY_END_MSG].join('\n')
         );
     }
+
+    this._cleanupNotebook();
+  }
+
+  _cleanupNotebook() {
+    const cells = this._context.model.cells;
+    const cellsToDelete: number[] = [];
+    for (let i = 0; i < cells.length; ++i) {
+      const cell = cells.get(i);
+      const lines = cell.sharedModel.getSource().split('\n');
+      let shouldDelete = true;
+      for (let j = 0; j < lines.length; ++j) {
+        const line = lines[j].trim();
+        // We are conservative here to only delete the cells which are empty or
+        // just have pyflyby messages
+        if (
+          line !== '' &&
+          line !== PYFLYBY_START_MSG &&
+          line !== PYFLYBY_END_MSG
+        ) {
+          shouldDelete = false;
+        }
+      }
+      if (shouldDelete) {
+        cellsToDelete.push(i);
+      }
+    }
+
+    this._context.model.sharedModel.transact(() => {
+      for (let i = cellsToDelete.length - 1; i >= 0; --i) {
+        this._context.model.sharedModel.deleteCell(cellsToDelete[i]);
+      }
+    });
   }
 
   _fastStringHash(str: string) {
