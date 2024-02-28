@@ -374,8 +374,8 @@ class PyflyByWidget extends Widget {
         // just have pyflyby messages
         if (
           line !== '' &&
-          line !== PYFLYBY_START_MSG &&
-          line !== PYFLYBY_END_MSG
+          line !== PYFLYBY_START_MSG.trim() &&
+          line !== PYFLYBY_END_MSG.trim()
         ) {
           shouldDelete = false;
         }

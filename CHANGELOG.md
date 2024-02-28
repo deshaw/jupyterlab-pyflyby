@@ -1,3 +1,9 @@
+## [5.1.2](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.1...v5.1.2) (2024-02-28)
+
+### Fixed
+
+- Fix pyflyby messages check during nb cleanup
+
 ## [5.1.1](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.0...v5.1.1) (2024-02-20)
 
 ### Fixed
