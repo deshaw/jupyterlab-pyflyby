@@ -550,6 +550,24 @@ class PyflyByWidget extends Widget {
   private _comms: any = {};
 }
 
+// Namespace for tracking PyflyByWidget instances
+namespace Private {
+  const widgetMap = new WeakMap<DocumentRegistry.IContext<INotebookModel>, PyflyByWidget>();
+
+  export function registerPyflyByWidget(
+    context: DocumentRegistry.IContext<INotebookModel>,
+    widget: PyflyByWidget
+  ): void {
+    widgetMap.set(context, widget);
+  }
+
+  export function findPyflyByWidget(
+    context: DocumentRegistry.IContext<INotebookModel>
+  ): PyflyByWidget | undefined {
+    return widgetMap.get(context);
+  }
+}
+
 /**
  * An extension that adds pyflyby integration to a notebook widget
  */
@@ -572,8 +590,10 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
   }
 
   createNew(panel: Panel, context: DocumentRegistry.IContext<INotebookModel>) {
-    pyflybyWidget = new PyflyByWidget(context, panel, this._settingRegistry);
-    return pyflybyWidget;
+    const widget = new PyflyByWidget(context, panel, this._settingRegistry);
+    // Register the widget with our Private helper
+    Private.registerPyflyByWidget(context, widget);
+    return widget;
   }
 
   private _settingRegistry: ISettingRegistry;
@@ -649,7 +669,13 @@ class TidyImportButtonExtension
       className: 'tidy-import-button',
       tooltip: 'Run tidy-imports on this notebook',
       icon: TidyImportsIcon,
-      onClick: () => pyflybyWidget.sendTidyImportRequest()
+      onClick: () => {
+        // Get the PyflyByWidget for this notebook
+        const pyflybyWidget = Private.findPyflyByWidget(context);
+        if (pyflybyWidget) {
+          pyflybyWidget.sendTidyImportRequest();
+        }
+      }
     });
 
     widget.toolbar.insertItem(10, 'tidy-imports', button);
@@ -664,15 +690,13 @@ const TidyImportsIcon = new LabIcon({
   svgstr: tidyImportSVG
 });
 
-let pyflybyWidget: any = null;
-
 const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
 const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
   requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
-  activate: async function (
+  activate: async function(
     app: JupyterFrontEnd,
     registry: ISettingRegistry,
     tracker: INotebookTracker,
@@ -683,7 +707,17 @@ const extension: JupyterFrontEndPlugin<void> = {
     );
 
     app.commands.addCommand(djsTidyImportsCommand, {
-      execute: () => pyflybyWidget.sendTidyImportRequest(),
+      execute: () => {
+        // Get the current notebook
+        const current = tracker.currentWidget;
+        if (!current) return;
+
+        // Get the PyflyByWidget for this notebook
+        const widget = Private.findPyflyByWidget(current.context);
+        if (widget) {
+          widget.sendTidyImportRequest();
+        }
+      },
       icon: TidyImportsIcon,
       label: 'Run tidy-imports on Notebook'
     });
