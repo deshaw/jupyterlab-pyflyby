@@ -552,7 +552,10 @@ class PyflyByWidget extends Widget {
 
 // Namespace for tracking PyflyByWidget instances
 namespace Private {
-  const widgetMap = new WeakMap<DocumentRegistry.IContext<INotebookModel>, PyflyByWidget>();
+  const widgetMap = new WeakMap<
+    DocumentRegistry.IContext<INotebookModel>,
+    PyflyByWidget
+  >();
 
   export function registerPyflyByWidget(
     context: DocumentRegistry.IContext<INotebookModel>,
@@ -696,7 +699,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
   requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
-  activate: async function(
+  activate: async function (
     app: JupyterFrontEnd,
     registry: ISettingRegistry,
     tracker: INotebookTracker,
@@ -710,7 +713,9 @@ const extension: JupyterFrontEndPlugin<void> = {
       execute: () => {
         // Get the current notebook
         const current = tracker.currentWidget;
-        if (!current) return;
+        if (!current) {
+          return;
+        }
 
         // Get the PyflyByWidget for this notebook
         const widget = Private.findPyflyByWidget(current.context);
