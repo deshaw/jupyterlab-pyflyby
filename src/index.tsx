@@ -67,7 +67,7 @@ const log = debug('PYFLYBY:');
 // Define a signal that will be used to communicate between widget extensions
 const pyflybySignal = new Signal<
   any,
-  { context: DocumentRegistry.IContext<INotebookModel>, action: string }
+  { context: DocumentRegistry.IContext<INotebookModel>; action: string }
 >({});
 
 class CommLock {
@@ -193,7 +193,10 @@ class PyflyByWidget extends Widget {
     pyflybySignal.connect(this._handleSignal, this);
   }
 
-  private _handleSignal(_sender: any, args: { context: DocumentRegistry.IContext<INotebookModel>, action: string }) {
+  private _handleSignal(
+    _sender: any,
+    args: { context: DocumentRegistry.IContext<INotebookModel>; action: string }
+  ) {
     if (args.context === this._context && args.action === 'tidyImports') {
       this.sendTidyImportRequest();
     }
@@ -653,7 +656,8 @@ const installationBody = (
 );
 
 class TidyImportButtonExtension
-  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
+  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel>
+{
   createNew(
     widget: NotebookPanel,
     context: DocumentRegistry.IContext<INotebookModel>
@@ -689,7 +693,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
   requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
-  activate: async function(
+  activate: async function (
     app: JupyterFrontEnd,
     registry: ISettingRegistry,
     tracker: INotebookTracker,
@@ -703,7 +707,9 @@ const extension: JupyterFrontEndPlugin<void> = {
       execute: () => {
         // Get the current notebook
         const current = tracker.currentWidget;
-        if (!current) return;
+        if (!current) {
+          return;
+        }
 
         // Emit a signal for the current notebook context
         pyflybySignal.emit({
