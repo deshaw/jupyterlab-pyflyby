@@ -64,6 +64,12 @@ import { requestAPI } from './handler';
 
 const log = debug('PYFLYBY:');
 
+// Define a signal that will be used to communicate between widget extensions
+const pyflybySignal = new Signal<
+  any,
+  { context: DocumentRegistry.IContext<INotebookModel>, action: string }
+>({});
+
 class CommLock {
   _releaseLock: any;
   promise: any;
@@ -182,6 +188,15 @@ class PyflyByWidget extends Widget {
     );
     this._context = context;
     this._sessionContext = context.sessionContext;
+
+    // Connect to our signal to listen for actions from the button
+    pyflybySignal.connect(this._handleSignal, this);
+  }
+
+  private _handleSignal(_sender: any, args: { context: DocumentRegistry.IContext<INotebookModel>, action: string }) {
+    if (args.context === this._context && args.action === 'tidyImports') {
+      this.sendTidyImportRequest();
+    }
   }
 
   async _launchDialog(imports: any) {
@@ -550,27 +565,6 @@ class PyflyByWidget extends Widget {
   private _comms: any = {};
 }
 
-// Namespace for tracking PyflyByWidget instances
-namespace Private {
-  const widgetMap = new WeakMap<
-    DocumentRegistry.IContext<INotebookModel>,
-    PyflyByWidget
-  >();
-
-  export function registerPyflyByWidget(
-    context: DocumentRegistry.IContext<INotebookModel>,
-    widget: PyflyByWidget
-  ): void {
-    widgetMap.set(context, widget);
-  }
-
-  export function findPyflyByWidget(
-    context: DocumentRegistry.IContext<INotebookModel>
-  ): PyflyByWidget | undefined {
-    return widgetMap.get(context);
-  }
-}
-
 /**
  * An extension that adds pyflyby integration to a notebook widget
  */
@@ -593,10 +587,7 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
   }
 
   createNew(panel: Panel, context: DocumentRegistry.IContext<INotebookModel>) {
-    const widget = new PyflyByWidget(context, panel, this._settingRegistry);
-    // Register the widget with our Private helper
-    Private.registerPyflyByWidget(context, widget);
-    return widget;
+    return new PyflyByWidget(context, panel, this._settingRegistry);
   }
 
   private _settingRegistry: ISettingRegistry;
@@ -662,8 +653,7 @@ const installationBody = (
 );
 
 class TidyImportButtonExtension
-  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel>
-{
+  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel> {
   createNew(
     widget: NotebookPanel,
     context: DocumentRegistry.IContext<INotebookModel>
@@ -673,11 +663,11 @@ class TidyImportButtonExtension
       tooltip: 'Run tidy-imports on this notebook',
       icon: TidyImportsIcon,
       onClick: () => {
-        // Get the PyflyByWidget for this notebook
-        const pyflybyWidget = Private.findPyflyByWidget(context);
-        if (pyflybyWidget) {
-          pyflybyWidget.sendTidyImportRequest();
-        }
+        // Emit a signal with the notebook context
+        pyflybySignal.emit({
+          context: context,
+          action: 'tidyImports'
+        });
       }
     });
 
@@ -699,7 +689,7 @@ const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
   requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
-  activate: async function (
+  activate: async function(
     app: JupyterFrontEnd,
     registry: ISettingRegistry,
     tracker: INotebookTracker,
@@ -713,15 +703,13 @@ const extension: JupyterFrontEndPlugin<void> = {
       execute: () => {
         // Get the current notebook
         const current = tracker.currentWidget;
-        if (!current) {
-          return;
-        }
+        if (!current) return;
 
-        // Get the PyflyByWidget for this notebook
-        const widget = Private.findPyflyByWidget(current.context);
-        if (widget) {
-          widget.sendTidyImportRequest();
-        }
+        // Emit a signal for the current notebook context
+        pyflybySignal.emit({
+          context: current.context,
+          action: 'tidyImports'
+        });
       },
       icon: TidyImportsIcon,
       label: 'Run tidy-imports on Notebook'
@@ -764,6 +752,7 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
     }
 
+    // Register the extensions
     app.docRegistry.addWidgetExtension(
       'Notebook',
       new PyflyByWidgetExtension(registry)
