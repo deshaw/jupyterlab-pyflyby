@@ -64,6 +64,12 @@ import { requestAPI } from './handler';
 
 const log = debug('PYFLYBY:');
 
+// Define a signal that will be used to communicate between widget extensions
+const pyflybySignal = new Signal<
+  any,
+  { context: DocumentRegistry.IContext<INotebookModel>; action: string }
+>({});
+
 class CommLock {
   _releaseLock: any;
   promise: any;
@@ -182,6 +188,18 @@ class PyflyByWidget extends Widget {
     );
     this._context = context;
     this._sessionContext = context.sessionContext;
+
+    // Connect to our signal to listen for actions from the button
+    pyflybySignal.connect(this._handleSignal, this);
+  }
+
+  private _handleSignal(
+    _sender: any,
+    args: { context: DocumentRegistry.IContext<INotebookModel>; action: string }
+  ) {
+    if (args.context === this._context && args.action === 'tidyImports') {
+      this.sendTidyImportRequest();
+    }
   }
 
   async _launchDialog(imports: any) {
@@ -572,8 +590,7 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
   }
 
   createNew(panel: Panel, context: DocumentRegistry.IContext<INotebookModel>) {
-    pyflybyWidget = new PyflyByWidget(context, panel, this._settingRegistry);
-    return pyflybyWidget;
+    return new PyflyByWidget(context, panel, this._settingRegistry);
   }
 
   private _settingRegistry: ISettingRegistry;
@@ -649,7 +666,13 @@ class TidyImportButtonExtension
       className: 'tidy-import-button',
       tooltip: 'Run tidy-imports on this notebook',
       icon: TidyImportsIcon,
-      onClick: () => pyflybyWidget.sendTidyImportRequest()
+      onClick: () => {
+        // Emit a signal with the notebook context
+        pyflybySignal.emit({
+          context: context,
+          action: 'tidyImports'
+        });
+      }
     });
 
     widget.toolbar.insertItem(10, 'tidy-imports', button);
@@ -663,8 +686,6 @@ const TidyImportsIcon = new LabIcon({
   name: 'TidyImports',
   svgstr: tidyImportSVG
 });
-
-let pyflybyWidget: any = null;
 
 const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
@@ -683,7 +704,19 @@ const extension: JupyterFrontEndPlugin<void> = {
     );
 
     app.commands.addCommand(djsTidyImportsCommand, {
-      execute: () => pyflybyWidget.sendTidyImportRequest(),
+      execute: () => {
+        // Get the current notebook
+        const current = tracker.currentWidget;
+        if (!current) {
+          return;
+        }
+
+        // Emit a signal for the current notebook context
+        pyflybySignal.emit({
+          context: current.context,
+          action: 'tidyImports'
+        });
+      },
       icon: TidyImportsIcon,
       label: 'Run tidy-imports on Notebook'
     });
@@ -725,6 +758,7 @@ const extension: JupyterFrontEndPlugin<void> = {
       }
     }
 
+    // Register the extensions
     app.docRegistry.addWidgetExtension(
       'Notebook',
       new PyflyByWidgetExtension(registry)

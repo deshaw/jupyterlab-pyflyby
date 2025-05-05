@@ -1,3 +1,9 @@
+## [5.1.3](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.2...v5.1.3) (UNRELEASED)
+
+### Fixed
+
+- Tidy-imports running on incorrect tabs
+
 ## [5.1.2](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.1...v5.1.2) (2024-02-28)
 
 ### Fixed
