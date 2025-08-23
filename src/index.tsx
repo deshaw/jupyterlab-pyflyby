@@ -300,6 +300,7 @@ class PyflyByWidget extends Widget {
           msg_id: lockId,
           input_code: cellSource,
           imports: imports,
+          use_black: this._settings.get('useBlack'),
           type: PYFLYBY_COMMS.FORMAT_IMPORTS
         });
       }
