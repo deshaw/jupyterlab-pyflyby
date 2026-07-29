@@ -67,7 +67,11 @@ const log = debug('PYFLYBY:');
 // Define a signal that will be used to communicate between widget extensions
 const pyflybySignal = new Signal<
   any,
-  { context: DocumentRegistry.IContext<INotebookModel>; action: string }
+  {
+    context: DocumentRegistry.IContext<INotebookModel>;
+    action: string;
+    onDone?: (result: { status: 'success' | 'interrupted' }) => void;
+  }
 >({});
 
 class CommLock {
@@ -195,10 +199,14 @@ class PyflyByWidget extends Widget {
 
   private _handleSignal(
     _sender: any,
-    args: { context: DocumentRegistry.IContext<INotebookModel>; action: string }
+    args: {
+      context: DocumentRegistry.IContext<INotebookModel>;
+      action: string;
+      onDone?: (result: { status: 'success' | 'interrupted' }) => void;
+    }
   ) {
     if (args.context === this._context && args.action === 'tidyImports') {
-      this.sendTidyImportRequest();
+      this.sendTidyImportRequest(args.onDone);
     }
   }
 
@@ -306,15 +314,21 @@ class PyflyByWidget extends Widget {
     }
   }
 
-  async sendTidyImportRequest(): Promise<any> {
+  async sendTidyImportRequest(
+    onDone?: (result: { status: 'success' | 'interrupted' }) => void
+  ): Promise<any> {
     const cellArray = this._getCellArray();
     const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
     if (comm && !comm.isDisposed) {
+      this._pendingTidyDone = onDone;
       comm.send({
         type: PYFLYBY_COMMS.TIDY_IMPORTS,
         cellArray: cellArray,
         checksum: this._getHashOfCodeInNotebook()
       });
+    } else {
+      // No comm available (pyflyby not ready) — resolve so awaiters aren't left hanging.
+      onDone?.({ status: 'interrupted' });
     }
   }
 
@@ -460,6 +474,7 @@ class PyflyByWidget extends Widget {
           const { cells, imports, checksum } = msgContent;
           if (checksum === this._getHashOfCodeInNotebook()) {
             this.restoreNotebookAfterTidyImports(cells, imports);
+            this._pendingTidyDone?.({ status: 'success' });
           } else {
             await showDialog({
               title: 'TidyImports Interrupted',
@@ -471,7 +486,9 @@ class PyflyByWidget extends Widget {
               ],
               defaultButton: 0
             });
+            this._pendingTidyDone?.({ status: 'interrupted' });
           }
+          this._pendingTidyDone = undefined;
           break;
         }
         default:
@@ -566,6 +583,7 @@ class PyflyByWidget extends Widget {
   private _sessionContext: ISessionContext;
   private _settings: ISettingRegistry.ISettings | undefined;
   private _comms: any = {};
+  private _pendingTidyDone?: (result: { status: 'success' | 'interrupted' }) => void;
 }
 
 /**
@@ -704,17 +722,25 @@ const extension: JupyterFrontEndPlugin<void> = {
     );
 
     app.commands.addCommand(djsTidyImportsCommand, {
-      execute: () => {
-        // Get the current notebook
-        const current = tracker.currentWidget;
+      execute: args => {
+        // If a `path` arg is provided, target that notebook by its context path
+        // (so tidy-imports can run without changing focus); otherwise fall back
+        // to the currently active notebook.
+        const path = (args?.path as string) || undefined;
+        const current = path
+          ? tracker.find(widget => widget.context.path === path)
+          : tracker.currentWidget;
         if (!current) {
           return;
         }
 
-        // Emit a signal for the current notebook context
-        pyflybySignal.emit({
-          context: current.context,
-          action: 'tidyImports'
+        // Resolve when the tidy round-trip completes (via the comm reply handler).
+        return new Promise<{ status: string } | void>(resolve => {
+          pyflybySignal.emit({
+            context: current.context,
+            action: 'tidyImports',
+            onDone: resolve
+          });
         });
       },
       icon: TidyImportsIcon,
