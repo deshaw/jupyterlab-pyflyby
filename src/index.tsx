@@ -583,7 +583,9 @@ class PyflyByWidget extends Widget {
   private _sessionContext: ISessionContext;
   private _settings: ISettingRegistry.ISettings | undefined;
   private _comms: any = {};
-  private _pendingTidyDone?: (result: { status: 'success' | 'interrupted' }) => void;
+  private _pendingTidyDone?: (result: {
+    status: 'success' | 'interrupted';
+  }) => void;
 }
 
 /**
@@ -723,25 +725,48 @@ const extension: JupyterFrontEndPlugin<void> = {
 
     app.commands.addCommand(djsTidyImportsCommand, {
       execute: args => {
-        // If a `path` arg is provided, target that notebook by its context path
-        // (so tidy-imports can run without changing focus); otherwise fall back
-        // to the currently active notebook.
+        // With an explicit `path` arg, target that notebook by its context path
+        // (so tidy-imports can run without changing the user's focus); otherwise
+        // fall back to the currently active notebook.
         const path = (args?.path as string) || undefined;
-        const current = path
+        const notebook = path
           ? tracker.find(widget => widget.context.path === path)
           : tracker.currentWidget;
-        if (!current) {
+
+        if (!notebook) {
+          if (path) {
+            // A path was given but no open notebook matches it (not open, or a
+            // typo / name-only instead of the full path): reject so callers get
+            // a clear signal instead of a silent no-op.
+            return Promise.reject(
+              new Error(`No open notebook found for path: ${path}`)
+            );
+          }
+          // No path and no active notebook: nothing to tidy (unchanged behavior).
           return;
         }
 
         // Resolve when the tidy round-trip completes (via the comm reply handler).
         return new Promise<{ status: string } | void>(resolve => {
           pyflybySignal.emit({
-            context: current.context,
+            context: notebook.context,
             action: 'tidyImports',
             onDone: resolve
           });
         });
+      },
+      // Document the accepted args so they surface in the Keyboard Shortcuts
+      // panel, ui-profiler scenarios, and command-driven AI integrations.
+      describedBy: {
+        args: {
+          type: 'object',
+          properties: {
+            path: {
+              type: 'string',
+              description: 'Path to the notebook to tidy'
+            }
+          }
+        }
       },
       icon: TidyImportsIcon,
       label: 'Run tidy-imports on Notebook'
