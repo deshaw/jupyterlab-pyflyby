@@ -64,13 +64,28 @@ import { requestAPI } from './handler';
 
 const log = debug('PYFLYBY:');
 
+// Outcome of a tidy-imports round-trip. 'unavailable' = comm not ready; 'busy' =
+// a run is already in flight on the notebook's single channel; 'timeout' = no
+// reply arrived in time and the in-flight guard was released.
+type TidyImportsStatus =
+  | 'success'
+  | 'interrupted'
+  | 'unavailable'
+  | 'busy'
+  | 'timeout';
+type TidyImportsDone = (result: { status: TidyImportsStatus }) => void;
+
+// Last-resort self-heal: if a run never replies (kernel wedged), release the
+// guard and resolve 'timeout' so the notebook isn't stuck 'busy'.
+const TIDY_IMPORTS_TIMEOUT_MS = 120_000; // 2 minutes
+
 // Define a signal that will be used to communicate between widget extensions
 const pyflybySignal = new Signal<
   any,
   {
     context: DocumentRegistry.IContext<INotebookModel>;
     action: string;
-    onDone?: (result: { status: 'success' | 'interrupted' }) => void;
+    onDone?: TidyImportsDone;
   }
 >({});
 
@@ -202,7 +217,7 @@ class PyflyByWidget extends Widget {
     args: {
       context: DocumentRegistry.IContext<INotebookModel>;
       action: string;
-      onDone?: (result: { status: 'success' | 'interrupted' }) => void;
+      onDone?: TidyImportsDone;
     }
   ) {
     if (args.context === this._context && args.action === 'tidyImports') {
@@ -314,22 +329,49 @@ class PyflyByWidget extends Widget {
     }
   }
 
-  async sendTidyImportRequest(
-    onDone?: (result: { status: 'success' | 'interrupted' }) => void
-  ): Promise<any> {
-    const cellArray = this._getCellArray();
-    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
-    if (comm && !comm.isDisposed) {
-      this._pendingTidyDone = onDone;
-      comm.send({
-        type: PYFLYBY_COMMS.TIDY_IMPORTS,
-        cellArray: cellArray,
-        checksum: this._getHashOfCodeInNotebook()
-      });
-    } else {
-      // No comm available (pyflyby not ready) — resolve so awaiters aren't left hanging.
-      onDone?.({ status: 'interrupted' });
+  // Release the in-flight guard + timer and resolve the awaiter (if any) exactly
+  // once, so a request is never left hanging, double-resolved, or stuck 'busy'.
+  private _resolvePendingTidy(status: TidyImportsStatus) {
+    if (this._tidyTimeoutId !== undefined) {
+      clearTimeout(this._tidyTimeoutId);
+      this._tidyTimeoutId = undefined;
     }
+    this._tidyInFlight = false;
+    const done = this._pendingTidyDone;
+    this._pendingTidyDone = undefined;
+    done?.({ status });
+  }
+
+  async sendTidyImportRequest(onDone?: TidyImportsDone): Promise<any> {
+    // One run at a time on the notebook's single comm channel: with no request
+    // id we can't correlate overlapping replies, so reject a new caller as
+    // 'busy' and let the in-flight run finish (the timeout guarantees release).
+    if (this._tidyInFlight) {
+      onDone?.({ status: 'busy' });
+      return;
+    }
+
+    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
+    if (!comm || comm.isDisposed) {
+      // Comm not open (pyflyby not ready) — the run never starts, so report
+      // 'unavailable' (distinct from an interrupted in-flight run).
+      onDone?.({ status: 'unavailable' });
+      return;
+    }
+
+    this._tidyInFlight = true;
+    this._pendingTidyDone = onDone;
+    this._tidyTimeoutId = setTimeout(() => {
+      // No reply within the window — release the guard so later requests aren't
+      // stalled forever behind a flag that never cleared.
+      this._resolvePendingTidy('timeout');
+    }, TIDY_IMPORTS_TIMEOUT_MS);
+
+    comm.send({
+      type: PYFLYBY_COMMS.TIDY_IMPORTS,
+      cellArray: this._getCellArray(),
+      checksum: this._getHashOfCodeInNotebook()
+    });
   }
 
   _getCellArray() {
@@ -474,8 +516,12 @@ class PyflyByWidget extends Widget {
           const { cells, imports, checksum } = msgContent;
           if (checksum === this._getHashOfCodeInNotebook()) {
             this.restoreNotebookAfterTidyImports(cells, imports);
-            this._pendingTidyDone?.({ status: 'success' });
+            this._resolvePendingTidy('success');
           } else {
+            // Resolve the awaiter first so it isn't blocked on the user
+            // dismissing the dialog (which can take a while), then surface the
+            // interruption notice.
+            this._resolvePendingTidy('interrupted');
             await showDialog({
               title: 'TidyImports Interrupted',
               body: 'TidyImports could not be run because code in the notebook has been changed',
@@ -486,9 +532,7 @@ class PyflyByWidget extends Widget {
               ],
               defaultButton: 0
             });
-            this._pendingTidyDone?.({ status: 'interrupted' });
           }
-          this._pendingTidyDone = undefined;
           break;
         }
         default:
@@ -566,6 +610,9 @@ class PyflyByWidget extends Widget {
     _sender: ISessionContext,
     _kernelChangedArgs: Session.ISessionConnection.IKernelChangedArgs
   ): Promise<any> {
+    // The kernel (and its comms) is being swapped out, so any in-flight
+    // tidy-imports request will never get a reply — resolve it as interrupted.
+    this._resolvePendingTidy('interrupted');
     return await this._initializeComms();
   }
 
@@ -574,6 +621,9 @@ class PyflyByWidget extends Widget {
     args: Kernel.Status
   ): Promise<any> | null {
     if (args === 'restarting') {
+      // A restart tears down the comms; fail any in-flight tidy-imports request
+      // instead of leaving its awaiter hanging.
+      this._resolvePendingTidy('interrupted');
       return this._initializeComms();
     }
     return null;
@@ -583,9 +633,12 @@ class PyflyByWidget extends Widget {
   private _sessionContext: ISessionContext;
   private _settings: ISettingRegistry.ISettings | undefined;
   private _comms: any = {};
-  private _pendingTidyDone?: (result: {
-    status: 'success' | 'interrupted';
-  }) => void;
+  private _pendingTidyDone?: TidyImportsDone;
+  // True while a tidy round-trip is outstanding. Gates concurrent requests even
+  // for fire-and-forget callers (e.g. the toolbar) that pass no onDone.
+  private _tidyInFlight = false;
+  // Timer that force-resolves a stale in-flight request (see the timeout const).
+  private _tidyTimeoutId?: ReturnType<typeof setTimeout>;
 }
 
 /**
