@@ -1,4 +1,10 @@
-## [5.1.3](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.2...v5.1.3) (UNRELEASED)
+## [5.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.3...main) (2026-08-05)
+
+### Added
+
+- Allow triggering tidy-imports by notebook path and awaiting completion
+
+## [5.1.3](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.2...v5.1.3) (2025-05-05)
 
 ### Fixed
 
