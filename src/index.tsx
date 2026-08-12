@@ -32,6 +32,7 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 import { Dialog, ISessionContext, showDialog } from '@jupyterlab/apputils';
+import { PageConfig, PathExt } from '@jupyterlab/coreutils';
 import { ICellModel } from '@jupyterlab/cells';
 import { ISharedCell } from '@jupyter/ydoc';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -72,7 +73,10 @@ type TidyImportsStatus =
   | 'interrupted'
   | 'unavailable'
   | 'busy'
-  | 'timeout';
+  | 'timeout'
+  // Unexpected exception caught mid-run; lets the awaiter fail fast instead of
+  // waiting out the self-heal timeout.
+  | 'error';
 type TidyImportsDone = (result: { status: TidyImportsStatus }) => void;
 
 // Last-resort self-heal: if a run never replies (kernel wedged), release the
@@ -80,14 +84,16 @@ type TidyImportsDone = (result: { status: TidyImportsStatus }) => void;
 const TIDY_IMPORTS_TIMEOUT_MS = 120_000; // 2 minutes
 
 // Define a signal that will be used to communicate between widget extensions
-const pyflybySignal = new Signal<
-  any,
-  {
-    context: DocumentRegistry.IContext<INotebookModel>;
-    action: string;
-    onDone?: TidyImportsDone;
-  }
->({});
+type PyflybySignalArgs = {
+  context: DocumentRegistry.IContext<INotebookModel>;
+  action: string;
+  onDone?: TidyImportsDone;
+  // Set by the widget that claims the signal, so the emitter can detect the
+  // "no widget handled it" case and settle fast.
+  handled?: boolean;
+};
+
+const pyflybySignal = new Signal<any, PyflybySignalArgs>({});
 
 class CommLock {
   _releaseLock: any;
@@ -212,17 +218,28 @@ class PyflyByWidget extends Widget {
     pyflybySignal.connect(this._handleSignal, this);
   }
 
-  private _handleSignal(
-    _sender: any,
-    args: {
-      context: DocumentRegistry.IContext<INotebookModel>;
-      action: string;
-      onDone?: TidyImportsDone;
+  dispose(): void {
+    if (this.isDisposed) {
+      return;
     }
-  ) {
-    if (args.context === this._context && args.action === 'tidyImports') {
-      this.sendTidyImportRequest(args.onDone);
+    // The view is gone; a request it sent won't get a reply, so fail it fast.
+    this._resolvePendingTidy('interrupted');
+    super.dispose();
+  }
+
+  private _handleSignal(_sender: any, args: PyflybySignalArgs) {
+    if (args.context !== this._context || args.action !== 'tidyImports') {
+      return;
     }
+    // Views of one notebook share a context, so every view sees this signal.
+    // Only claim it if this view has an open comm to service it; otherwise let
+    // another view (or the emitter's `handled` fallback) resolve it.
+    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
+    if (!comm || comm.isDisposed) {
+      return;
+    }
+    args.handled = true;
+    this.sendTidyImportRequest(args.onDone);
   }
 
   async _launchDialog(imports: any) {
@@ -343,35 +360,38 @@ class PyflyByWidget extends Widget {
   }
 
   async sendTidyImportRequest(onDone?: TidyImportsDone): Promise<any> {
-    // One run at a time on the notebook's single comm channel: with no request
-    // id we can't correlate overlapping replies, so reject a new caller as
-    // 'busy' and let the in-flight run finish (the timeout guarantees release).
-    if (this._tidyInFlight) {
-      onDone?.({ status: 'busy' });
-      return;
+    // Wrap the whole flow so any failure settles the caller fast as 'error'
+    // instead of hanging until the self-heal timeout. Callers (via _handleSignal)
+    // guarantee an open comm.
+    try {
+      // One run at a time on the single comm channel: reject overlaps as 'busy'
+      // and let the in-flight run finish (the timeout guarantees release).
+      if (this._tidyInFlight) {
+        onDone?.({ status: 'busy' });
+        return;
+      }
+
+      this._tidyInFlight = true;
+      this._pendingTidyDone = onDone;
+      this._tidyTimeoutId = setTimeout(() => {
+        // No reply in time — release the guard so later requests aren't stalled.
+        this._resolvePendingTidy('timeout');
+      }, TIDY_IMPORTS_TIMEOUT_MS);
+
+      this._comms[PYFLYBY_COMMS.TIDY_IMPORTS].send({
+        type: PYFLYBY_COMMS.TIDY_IMPORTS,
+        cellArray: this._getCellArray(),
+        checksum: this._getHashOfCodeInNotebook()
+      });
+    } catch (e) {
+      console.error('PYFLYBY: failed to start tidy-imports request', e);
+      // Release the guard if we armed it; otherwise settle the caller directly.
+      if (this._tidyInFlight) {
+        this._resolvePendingTidy('error');
+      } else {
+        onDone?.({ status: 'error' });
+      }
     }
-
-    const comm = this._comms[PYFLYBY_COMMS.TIDY_IMPORTS];
-    if (!comm || comm.isDisposed) {
-      // Comm not open (pyflyby not ready) — the run never starts, so report
-      // 'unavailable' (distinct from an interrupted in-flight run).
-      onDone?.({ status: 'unavailable' });
-      return;
-    }
-
-    this._tidyInFlight = true;
-    this._pendingTidyDone = onDone;
-    this._tidyTimeoutId = setTimeout(() => {
-      // No reply within the window — release the guard so later requests aren't
-      // stalled forever behind a flag that never cleared.
-      this._resolvePendingTidy('timeout');
-    }, TIDY_IMPORTS_TIMEOUT_MS);
-
-    comm.send({
-      type: PYFLYBY_COMMS.TIDY_IMPORTS,
-      cellArray: this._getCellArray(),
-      checksum: this._getHashOfCodeInNotebook()
-    });
   }
 
   _getCellArray() {
@@ -487,58 +507,69 @@ class PyflyByWidget extends Widget {
 
   _getCommMsgHandler() {
     return async (msg: KernelMessage.ICommMsgMsg) => {
-      const msgContent: JSONValue = msg.content.data;
-      switch ((msgContent as JSONObject).type) {
-        case PYFLYBY_COMMS.MISSING_IMPORTS: {
-          const itd = msgContent['missing_imports'];
-          this._insertImport(itd).then(async imports => {
-            // Acquire new lock but wait for previous lock to expire
-            if (this._lock !== undefined) {
-              const currentLockId = await this._lock.acquire();
-              this._sendFormatCodeMsg(imports, currentLockId);
-            }
-          });
-          break;
-        }
-        case PYFLYBY_COMMS.FORMAT_IMPORTS: {
-          this._formatImports(msgContent);
-          const { msg_id: lockId }: any = msgContent;
-          if (this._lock !== undefined) {
-            this._lock.release(lockId);
-          }
-          break;
-        }
-        case PYFLYBY_COMMS.INIT: {
-          this._initializeComms().catch(console.error);
-          break;
-        }
-        case PYFLYBY_COMMS.TIDY_IMPORTS: {
-          const { cells, imports, checksum } = msgContent;
-          if (checksum === this._getHashOfCodeInNotebook()) {
-            this.restoreNotebookAfterTidyImports(cells, imports);
-            this._resolvePendingTidy('success');
-          } else {
-            // Resolve the awaiter first so it isn't blocked on the user
-            // dismissing the dialog (which can take a while), then surface the
-            // interruption notice.
-            this._resolvePendingTidy('interrupted');
-            await showDialog({
-              title: 'TidyImports Interrupted',
-              body: 'TidyImports could not be run because code in the notebook has been changed',
-              buttons: [
-                Dialog.okButton({
-                  label: 'Ok'
-                })
-              ],
-              defaultButton: 0
-            });
-          }
-          break;
-        }
-        default:
-          break;
+      try {
+        await this._handleCommMsg(msg);
+      } catch (e) {
+        // Backstop: a throw while handling a reply (e.g. restore) would hang the
+        // request until the timeout. Settle fast; no-ops if nothing is pending.
+        console.error('PYFLYBY: error while handling comm message', e);
+        this._resolvePendingTidy('error');
       }
     };
+  }
+
+  async _handleCommMsg(msg: KernelMessage.ICommMsgMsg) {
+    const msgContent: JSONValue = msg.content.data;
+    switch ((msgContent as JSONObject).type) {
+      case PYFLYBY_COMMS.MISSING_IMPORTS: {
+        const itd = msgContent['missing_imports'];
+        this._insertImport(itd).then(async imports => {
+          // Acquire new lock but wait for previous lock to expire
+          if (this._lock !== undefined) {
+            const currentLockId = await this._lock.acquire();
+            this._sendFormatCodeMsg(imports, currentLockId);
+          }
+        });
+        break;
+      }
+      case PYFLYBY_COMMS.FORMAT_IMPORTS: {
+        this._formatImports(msgContent);
+        const { msg_id: lockId }: any = msgContent;
+        if (this._lock !== undefined) {
+          this._lock.release(lockId);
+        }
+        break;
+      }
+      case PYFLYBY_COMMS.INIT: {
+        this._initializeComms().catch(console.error);
+        break;
+      }
+      case PYFLYBY_COMMS.TIDY_IMPORTS: {
+        const { cells, imports, checksum } = msgContent;
+        if (checksum === this._getHashOfCodeInNotebook()) {
+          this.restoreNotebookAfterTidyImports(cells, imports);
+          this._resolvePendingTidy('success');
+        } else {
+          // Resolve the awaiter first so it isn't blocked on the user
+          // dismissing the dialog (which can take a while), then surface the
+          // interruption notice.
+          this._resolvePendingTidy('interrupted');
+          await showDialog({
+            title: 'TidyImports Interrupted',
+            body: 'TidyImports could not be run because code in the notebook has been changed',
+            buttons: [
+              Dialog.okButton({
+                label: 'Ok'
+              })
+            ],
+            defaultButton: 0
+          });
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
 
   async _initializeComms() {
@@ -574,6 +605,10 @@ class PyflyByWidget extends Widget {
 
     const tidyImportsComm = kernel.createComm(PYFLYBY_COMMS.TIDY_IMPORTS);
     tidyImportsComm.onMsg = this._getCommMsgHandler();
+    tidyImportsComm.onClose = (_msg: KernelMessage.ICommCloseMsg) => {
+      // Channel closed; no reply is coming — fail the in-flight request fast.
+      this._resolvePendingTidy('interrupted');
+    };
     this._comms[PYFLYBY_COMMS.TIDY_IMPORTS] = tidyImportsComm;
     try {
       tidyImportsComm.open();
@@ -621,10 +656,15 @@ class PyflyByWidget extends Widget {
     args: Kernel.Status
   ): Promise<any> | null {
     if (args === 'restarting') {
-      // A restart tears down the comms; fail any in-flight tidy-imports request
-      // instead of leaving its awaiter hanging.
+      // A restart tears down the comms; fail the in-flight request and rebuild
+      // the comms against the fresh kernel.
       this._resolvePendingTidy('interrupted');
       return this._initializeComms();
+    }
+    if (args === 'dead' || args === 'autorestarting' || args === 'unknown') {
+      // Kernel died / auto-restarting / connection lost — no reply will arrive;
+      // fail the in-flight request fast (comms rebuild on the next kernelChanged).
+      this._resolvePendingTidy('interrupted');
     }
     return null;
   }
@@ -762,6 +802,31 @@ const TidyImportsIcon = new LabIcon({
 
 const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
+// Reduce a requested path to the server-relative form used by `context.path`,
+// so an absolute path (e.g. from an MCP tool) matches an open notebook. An
+// already-relative path is returned unchanged.
+function toServerRelativePath(requested: string): string {
+  let p = PathExt.normalize(requested);
+  if (p.startsWith('/')) {
+    const serverRoot = PageConfig.getOption('serverRoot');
+    if (serverRoot) {
+      const root = PathExt.normalize(serverRoot).replace(/\/+$/, '');
+      if (p === root) {
+        p = '';
+      } else if (p.startsWith(root + '/')) {
+        p = p.slice(root.length + 1);
+      }
+    }
+  }
+  return p.replace(/^\/+/, '');
+}
+
+// Whether an open notebook's `context.path` refers to the requested path. Exact
+// match only (no suffix heuristics) so we never target the wrong notebook.
+function notebookPathMatches(widgetPath: string, requested: string): boolean {
+  return PathExt.normalize(widgetPath) === toServerRelativePath(requested);
+}
+
 const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
@@ -783,7 +848,9 @@ const extension: JupyterFrontEndPlugin<void> = {
         // fall back to the currently active notebook.
         const path = (args?.path as string) || undefined;
         const notebook = path
-          ? tracker.find(widget => widget.context.path === path)
+          ? tracker.find(widget =>
+              notebookPathMatches(widget.context.path, path)
+            )
           : tracker.currentWidget;
 
         if (!notebook) {
@@ -800,12 +867,29 @@ const extension: JupyterFrontEndPlugin<void> = {
         }
 
         // Resolve when the tidy round-trip completes (via the comm reply handler).
-        return new Promise<{ status: string } | void>(resolve => {
-          pyflybySignal.emit({
+        return new Promise<{ status: string } | void>((resolve, reject) => {
+          const settle: TidyImportsDone = result => {
+            // 'error' = internal exception → reject (like the path reject above);
+            // every other outcome resolves with its status.
+            if (result.status === 'error') {
+              reject(new Error('tidy-imports failed due to an internal error'));
+            } else {
+              resolve(result);
+            }
+          };
+
+          const signalArgs: PyflybySignalArgs = {
             context: notebook.context,
             action: 'tidyImports',
-            onDone: resolve
-          });
+            onDone: settle,
+            handled: false
+          };
+          pyflybySignal.emit(signalArgs);
+
+          // Slots run synchronously; if no widget claimed it, settle fast.
+          if (!signalArgs.handled) {
+            settle({ status: 'unavailable' });
+          }
         });
       },
       // Document the accepted args so they surface in the Keyboard Shortcuts
