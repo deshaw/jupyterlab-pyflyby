@@ -231,6 +231,11 @@ class PyflyByWidget extends Widget {
     if (args.context !== this._context || args.action !== 'tidyImports') {
       return;
     }
+    // Slots run synchronously in order; if a sibling view already claimed this
+    // emit, short-circuit so we don't send a duplicate request.
+    if (args.handled) {
+      return;
+    }
     // Views of one notebook share a context, so every view sees this signal.
     // Only claim it if this view has an open comm to service it; otherwise let
     // another view (or the emitter's `handled` fallback) resolve it.
@@ -804,13 +809,15 @@ const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
 // Reduce a requested path to the server-relative form used by `context.path`,
 // so an absolute path (e.g. from an MCP tool) matches an open notebook. An
-// already-relative path is returned unchanged.
+// already-relative path is returned unchanged. The absolute-path check runs on
+// the raw string because PathExt.normalize strips the leading slash.
 function toServerRelativePath(requested: string): string {
-  let p = PathExt.normalize(requested);
+  let p = requested;
   if (p.startsWith('/')) {
     const serverRoot = PageConfig.getOption('serverRoot');
     if (serverRoot) {
-      const root = PathExt.normalize(serverRoot).replace(/\/+$/, '');
+      // Make serverRoot absolute, collapse duplicate slashes, drop trailing one.
+      const root = ('/' + serverRoot).replace(/\/+/g, '/').replace(/\/+$/, '');
       if (p === root) {
         p = '';
       } else if (p.startsWith(root + '/')) {
@@ -818,7 +825,7 @@ function toServerRelativePath(requested: string): string {
       }
     }
   }
-  return p.replace(/^\/+/, '');
+  return PathExt.normalize(p);
 }
 
 // Whether an open notebook's `context.path` refers to the requested path. Exact
