@@ -825,8 +825,7 @@ const extension: JupyterFrontEndPlugin<void> = {
         // With an explicit `path` arg, target that notebook by its context path
         // (so tidy-imports can run without changing the user's focus); otherwise
         // fall back to the currently active notebook. Matching is exact on
-        // `context.path` (Contents / server-relative), same as
-        // jupyterlab_code_formatter — callers must pass that form, not an
+        // `context.path` (Contents / server-relative), callers must pass that form, not an
         // absolute or `~/...` filesystem path.
         const path = (args?.path as string) || undefined;
         const notebook = path
