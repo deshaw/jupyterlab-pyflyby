@@ -32,7 +32,6 @@ import {
   JupyterFrontEndPlugin
 } from '@jupyterlab/application';
 import { Dialog, ISessionContext, showDialog } from '@jupyterlab/apputils';
-import { PageConfig, PathExt } from '@jupyterlab/coreutils';
 import { ICellModel } from '@jupyterlab/cells';
 import { ISharedCell } from '@jupyter/ydoc';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
@@ -807,33 +806,6 @@ const TidyImportsIcon = new LabIcon({
 
 const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
-// Reduce a requested path to the server-relative form used by `context.path`,
-// so an absolute path (e.g. from an MCP tool) matches an open notebook. An
-// already-relative path is returned unchanged. The absolute-path check runs on
-// the raw string because PathExt.normalize strips the leading slash.
-function toServerRelativePath(requested: string): string {
-  let p = requested;
-  if (p.startsWith('/')) {
-    const serverRoot = PageConfig.getOption('serverRoot');
-    if (serverRoot) {
-      // Make serverRoot absolute, collapse duplicate slashes, drop trailing one.
-      const root = ('/' + serverRoot).replace(/\/+/g, '/').replace(/\/+$/, '');
-      if (p === root) {
-        p = '';
-      } else if (p.startsWith(root + '/')) {
-        p = p.slice(root.length + 1);
-      }
-    }
-  }
-  return PathExt.normalize(p);
-}
-
-// Whether an open notebook's `context.path` refers to the requested path. Exact
-// match only (no suffix heuristics) so we never target the wrong notebook.
-function notebookPathMatches(widgetPath: string, requested: string): boolean {
-  return PathExt.normalize(widgetPath) === toServerRelativePath(requested);
-}
-
 const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
   autoStart: true,
@@ -852,12 +824,13 @@ const extension: JupyterFrontEndPlugin<void> = {
       execute: args => {
         // With an explicit `path` arg, target that notebook by its context path
         // (so tidy-imports can run without changing the user's focus); otherwise
-        // fall back to the currently active notebook.
+        // fall back to the currently active notebook. Matching is exact on
+        // `context.path` (Contents / server-relative), same as
+        // jupyterlab_code_formatter — callers must pass that form, not an
+        // absolute or `~/...` filesystem path.
         const path = (args?.path as string) || undefined;
         const notebook = path
-          ? tracker.find(widget =>
-              notebookPathMatches(widget.context.path, path)
-            )
+          ? tracker.find(widget => widget.context.path === path)
           : tracker.currentWidget;
 
         if (!notebook) {
@@ -907,7 +880,8 @@ const extension: JupyterFrontEndPlugin<void> = {
           properties: {
             path: {
               type: 'string',
-              description: 'Path to the notebook to tidy'
+              description:
+                'Path of the notebook to tidy; defaults to the active notebook. The notebook has to be open in JupyterLab (Contents / server-relative path, matching context.path).'
             }
           }
         }
