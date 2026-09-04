@@ -1,4 +1,17 @@
-## [5.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.3...main) (2026-08-05)
+## [5.3.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.2.0...main) (2026-09-04)
+
+### Changed
+
+- Improve error handling in the `pyflyby:tidy-imports` command
+- Minimum Python version is now 3.10
+- Minimum `jupyter_server` version is now 2.13.0
+- This package now uses jupyter-builder for bundling
+
+### Fixed
+
+- Fixed a mild memory leak due to lack of comms cleanup
+
+## [5.2.0](https://github.com/deshaw/jupyterlab-pyflyby/compare/v5.1.3...v5.2.0) (2026-08-05)
 
 ### Added
 
