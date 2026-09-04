@@ -173,7 +173,8 @@ class CommLock {
 let _userWasNotified = false;
 
 /**
- * An extension that adds pyflyby integration to a single notebook widget
+ * An extension that adds pyflyby integration to a single notebook. One
+ * instance serves all views of the notebook (see PyflyByWidgetExtension).
  */
 class PyflyByWidget extends Widget {
   _lock: CommLock | undefined;
@@ -198,6 +199,12 @@ class PyflyByWidget extends Widget {
             this._handleKernelStatusChange,
             this
           );
+          // kernelChanged does not fire for a kernel that is already running
+          // (a context that gets a new instance, or a session that connected
+          // before the settings loaded).
+          if (this._sessionContext.session?.kernel) {
+            this._initializeComms().catch(console.error);
+          }
         }
 
         const _lockTimeout =
@@ -223,7 +230,31 @@ class PyflyByWidget extends Widget {
     }
     // The view is gone; a request it sent won't get a reply, so fail it fast.
     this._resolvePendingTidy('interrupted');
+    // Widget can close before the kernel gets shut so comms connections need to be closed.
+    this._closeComms();
     super.dispose();
+  }
+
+  /**
+   * Close comms opened by this widget.
+   *
+   * Comms the connection has already disposed itself (kernel restart or
+   * change) are only dropped from the table.
+   */
+  private _closeComms(): void {
+    for (const targetName of Object.keys(this._comms)) {
+      const comm: Kernel.IComm = this._comms[targetName];
+      delete this._comms[targetName];
+      if (comm.isDisposed) {
+        continue;
+      }
+      try {
+        comm.close();
+      } catch {
+        // `close` throws once the kernel is dead or its connection is disposed
+        comm.dispose();
+      }
+    }
   }
 
   private _handleSignal(_sender: any, args: PyflybySignalArgs) {
@@ -248,17 +279,15 @@ class PyflyByWidget extends Widget {
 
   async _launchDialog(imports: any) {
     /**
-     * Since we are making the first import, create a new dialog
+     * Since we are making the first import, notify the user. `showDialog` owns
+     * the `Dialog` it creates and disposes it once the user dismisses it.
      */
-    const dialog = new Dialog({
-      title: 'PYFLYBY',
-      body: `PYFLYBY will be adding imports to the first code cell in the notebook.
-            To disable the PYFLYBY extension or to disable this notification in future, go
-            to Settings -> Advanced Settings Editor and choose PYFLYBY preferences tab`,
-      buttons: [Dialog.okButton()]
-    });
     try {
-      await dialog.launch();
+      await showDialog({
+        title: 'PYFLYBY',
+        body: 'PYFLYBY will be adding imports to the first code cell in the notebook. To disable the PYFLYBY extension or to disable this notification in future, go to Settings -> Advanced Settings Editor and choose PYFLYBY preferences tab',
+        buttons: [Dialog.okButton()]
+      });
       return imports;
     } catch (e) {
       console.error(e);
@@ -561,11 +590,7 @@ class PyflyByWidget extends Widget {
           await showDialog({
             title: 'TidyImports Interrupted',
             body: 'TidyImports could not be run because code in the notebook has been changed',
-            buttons: [
-              Dialog.okButton({
-                label: 'Ok'
-              })
-            ],
+            buttons: [Dialog.okButton()],
             defaultButton: 0
           });
         }
@@ -577,7 +602,12 @@ class PyflyByWidget extends Widget {
   }
 
   async _initializeComms() {
-    if (!this._sessionContext.session) {
+    // Close comms from a previous initialization (kernel change or restart, or
+    // a repeated INIT request from the kernel). Otherwise the old handlers stay
+    // registered on the kernel connection and the old comms stay open in the
+    // kernel, and every re-initialization adds another set.
+    this._closeComms();
+    if (this.isDisposed || !this._sessionContext.session) {
       return;
     }
     const { kernel } = this._sessionContext.session;
@@ -588,6 +618,7 @@ class PyflyByWidget extends Widget {
     const targetName = PYFLYBY_COMMS.MISSING_IMPORTS;
     const comm = kernel.createComm(targetName);
     comm.onMsg = this._getCommMsgHandler();
+    this._comms[targetName] = comm;
     try {
       comm.open();
     } catch (e) {
@@ -701,16 +732,46 @@ class PyflyByWidgetExtension implements DocumentRegistry.WidgetExtension {
     try {
       await this._settingRegistry.load('@deshaw/jupyterlab-pyflyby:plugin');
       log('Successfully loaded PYFLYBY extension settings');
-    } catch (e) {
+    } catch {
       console.error('Settings could not be loaded');
     }
   }
 
   createNew(panel: Panel, context: DocumentRegistry.IContext<INotebookModel>) {
-    return new PyflyByWidget(context, panel, this._settingRegistry);
+    // Views of a notebook share its context, session and kernel, and pyflyby
+    // keeps one comm per target and kernel, so one instance serves all views.
+    // It is disposed with the last view, which JupyterLab disposes before the
+    // context, so the comms are closed while the kernel connection is open.
+    let shared = this._instances.get(context);
+    if (!shared) {
+      const widget = new PyflyByWidget(context, panel, this._settingRegistry);
+      this._instances.set(context, widget);
+      shared = widget;
+    }
+    const instance = shared;
+    this._views.set(context, (this._views.get(context) ?? 0) + 1);
+    return new DisposableDelegate(() => {
+      const views = (this._views.get(context) ?? 1) - 1;
+      if (views > 0) {
+        this._views.set(context, views);
+        return;
+      }
+      this._views.delete(context);
+      this._instances.delete(context);
+      instance.dispose();
+    });
   }
 
   private _settingRegistry: ISettingRegistry;
+  // One PyflyByWidget per notebook context, and the number of views using it.
+  private _instances = new WeakMap<
+    DocumentRegistry.IContext<INotebookModel>,
+    PyflyByWidget
+  >();
+  private _views = new WeakMap<
+    DocumentRegistry.IContext<INotebookModel>,
+    number
+  >();
 }
 
 async function isPyflybyInstalled() {
@@ -772,9 +833,10 @@ const installationBody = (
   </div>
 );
 
-class TidyImportButtonExtension
-  implements DocumentRegistry.IWidgetExtension<NotebookPanel, INotebookModel>
-{
+class TidyImportButtonExtension implements DocumentRegistry.IWidgetExtension<
+  NotebookPanel,
+  INotebookModel
+> {
   createNew(
     widget: NotebookPanel,
     context: DocumentRegistry.IContext<INotebookModel>
@@ -808,6 +870,8 @@ const djsTidyImportsCommand = 'djs:run-tidy-imports';
 
 const extension: JupyterFrontEndPlugin<void> = {
   id: '@deshaw/jupyterlab-pyflyby:plugin',
+  description:
+    'Integrates pyflyby with JupyterLab notebooks: adds missing imports automatically and exposes a tidy-imports command.',
   autoStart: true,
   requires: [ISettingRegistry, INotebookTracker, ICommandPalette],
   activate: async function (
@@ -915,13 +979,17 @@ const extension: JupyterFrontEndPlugin<void> = {
               Dialog.okButton({
                 label: 'Install'
               }),
-              Dialog.cancelButton({ label: 'Cancel', displayType: 'default' })
+              Dialog.cancelButton({
+                displayType: 'default'
+              })
             ],
             defaultButton: 0
           });
-          result.button.accept
-            ? await installPyflyby()
-            : await disableJupyterlabPyflyby(registry);
+          if (result.button.accept) {
+            await installPyflyby();
+          } else {
+            await disableJupyterlabPyflyby(registry);
+          }
         }
       }
     }

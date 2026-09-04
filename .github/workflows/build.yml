@@ -44,7 +44,7 @@ jobs:
       uses: jupyterlab/maintainer-tools/.github/actions/base-setup@94b14ddfbdd1ed651e9f9343ae2409ab5c73a6a8 # v1
 
     - name: Install dependencies
-      run: python -m pip install -U "jupyterlab>=4.0.0b0,<5"
+      run: python -m pip install -U "jupyter-builder>=1.2.0,<2"
 
     - name: Lint the extension
       run: |
@@ -55,14 +55,22 @@ jobs:
     - name: Build the extension
       run: |
         set -eux
-        python -m pip install .
+        python -m pip install .[test]
         py pyflyby.install_in_ipython_config_file
 
         jupyter server extension list
         jupyter server extension list 2>&1 | grep -ie "jupyterlab_pyflyby.*OK"
 
+        # JupyterLab is only needed to list/verify the installed labextension.
+        python -m pip install "jupyterlab>=4.0.0b0,<5"
+
         jupyter labextension list
         jupyter labextension list 2>&1 | grep -ie "@deshaw/jupyterlab-pyflyby.*OK"
+
+    - name: Check that all endpoints are authenticated
+      run: |
+        set -eux
+        python .github/scripts/check_auth.py
 
     - name: Package the extension
       run: |
@@ -91,7 +99,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
-        python-version: '3.9'
+        python-version: '3.10'
         architecture: 'x64'
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:

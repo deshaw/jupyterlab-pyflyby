@@ -27,17 +27,17 @@ pip install jupyterlab_pyflyby
 
 Note: You will need NodeJS to build the extension package.
 
-The `jlpm` command is JupyterLab's pinned version of
-[yarn](https://yarnpkg.com/) that is installed with JupyterLab. You may use
-`yarn` or `npm` in lieu of `jlpm` below.
+The `jlpm` command is the pinned version of [yarn](https://yarnpkg.com/) that is
+installed with [`jupyter-builder`](https://github.com/jupyterlab/jupyter-builder).
+You may use `yarn` or `npm` in lieu of `jlpm` below.
 
 ```bash
 # Clone the repo to your local environment
 # Change directory to the jupyterlab_pyflyby directory
-# Install package in development mode
-pip install -e .
+# Install package in development mode, along with the development dependencies
+pip install -e ".[dev]"
 # Link your development version of the extension with JupyterLab
-jupyter-labextension develop . --overwrite
+jupyter-builder develop . --overwrite
 # Rebuild extension Typescript source after making changes
 jlpm run build
 ```
@@ -59,10 +59,20 @@ By default, the `jlpm run build` command generates the source maps for this exte
 jupyter lab build --minimize=False
 ```
 
+#### Endpoint authentication
+
+Every verb method of every handler in `jupyterlab_pyflyby/handlers.py` must carry a
+`@tornado.web.authenticated` decorator, or, if an endpoint is deliberately public, an
+explicit `@allow_unauthenticated`/`@ws_authenticated` decorator from
+`jupyter_server.auth.decorator`. The `build` workflow enforces this by running:
+
+```bash
+python .github/scripts/check_auth.py
+```
+
 #### Publishing
 
-Before starting, you'll need to have run: `pip install twine jupyter_packaging`
-
+0. Install dependencies: `pip install twine hatch`
 1. Update the version in `package.json` and update the release date in `CHANGELOG.md`
 2. Commit the change in step 1
 3. For test release, manually trigger the [`Build and publish to PyPI` workflow](https://github.com/deshaw/jupyterlab-pyflyby/actions/workflows/build.yml) - you need to check the `Test release` checkbox
@@ -92,7 +102,7 @@ This project is released under a [BSD-3-Clause license](https://github.com/desha
 We love contributions! Before you can contribute, please sign and submit this [Contributor License Agreement (CLA)](https://www.deshaw.com/oss/cla).
 This CLA is in place to protect all users of this project.
 
-"Jupyter" is a trademark of the NumFOCUS foundation, of which Project Jupyter is a part.
+"Jupyter" is a trademark of the LF Charities, of which Project Jupyter is a part.
 
 [pypi-url]: https://pypi.org/project/jupyterlab-pyflyby
 [pypi-image]: https://img.shields.io/pypi/v/jupyterlab-pyflyby
